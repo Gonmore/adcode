@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /workspace
 
-RUN apk add --no-cache libc6-compat wget
+RUN apk add --no-cache libc6-compat wget openssl openssl1.1-compat
 
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json ./apps/api/package.json

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { uploadsEnabled } from "../../lib/env.js";
+import { uploadsEnabled } from "../../../lib/env.js";
 
 export default async function uploadsRoutes(app: FastifyInstance) {
   app.get("/status", async () => ({ uploadsEnabled }));

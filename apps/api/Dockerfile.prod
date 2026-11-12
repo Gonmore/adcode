@@ -1,6 +1,6 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl openssl1.1-compat
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
@@ -18,7 +18,7 @@ RUN npm run build --workspace @adcode/api
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk add --no-cache libc6-compat wget openssl tini \
+RUN apk add --no-cache libc6-compat wget openssl openssl1.1-compat tini \
   && addgroup -S nodejs -g 1001 \
   && adduser -S adcode -u 1001
 
