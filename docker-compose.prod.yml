@@ -1,0 +1,65 @@
+services:
+  api-adcode:
+    image: gonmore14/api-adcode:${APP_VERSION:-latest}
+    container_name: api-adcode
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${APP_VERSION:-latest}
+    ports:
+      - "4100:4100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4100/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - red-produccion
+
+  web-adcode:
+    image: gonmore14/web-adcode:${APP_VERSION:-latest}
+    container_name: web-adcode
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      api-adcode:
+        condition: service_healthy
+    ports:
+      - "4173:80"
+    networks:
+      - red-produccion
+
+  api-migrate:
+    image: gonmore14/api-adcode:${APP_VERSION:-latest}
+    container_name: api-adcode-migrate
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    command: ["npm", "run", "prisma:migrate:prod", "--workspace", "@adcode/api"]
+    networks:
+      - red-produccion
+    profiles:
+      - tools
+
+  api-seed:
+    image: gonmore14/api-adcode:${APP_VERSION:-latest}
+    container_name: api-adcode-seed
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    command: ["npm", "run", "db:seed:prod", "--workspace", "@adcode/api"]
+    networks:
+      - red-produccion
+    profiles:
+      - tools
+
+networks:
+  red-produccion:
+    external: true
+    name: ${DOCKER_EXTERNAL_NETWORK:-red-interna}

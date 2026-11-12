@@ -1,0 +1,29 @@
+{
+  "name": "adcode-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:api": "npm run dev --workspace @adcode/api",
+    "dev:web": "npm run dev --workspace @adcode/web",
+    "build": "npm run build -w @adcode/shared && npm run build -w @adcode/api && npm run build -w @adcode/web",
+    "build:shared": "npm run build --workspace @adcode/shared",
+    "build:api": "npm run build --workspace @adcode/api",
+    "build:web": "npm run build --workspace @adcode/web",
+    "prisma:generate": "npm run prisma:generate --workspace @adcode/api",
+    "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace @adcode/api",
+    "prisma:migrate:prod": "npm run prisma:migrate:prod --workspace @adcode/api",
+    "db:seed": "npm run db:seed --workspace @adcode/api",
+    "lint": "npm run lint -w @adcode/api && npm run lint -w @adcode/web",
+    "typecheck": "npm run typecheck -w @adcode/shared && npm run typecheck -w @adcode/api && npm run typecheck -w @adcode/web"
+  },
+  "prisma": {
+    "seed": "tsx apps/api/prisma/seed.ts"
+  }
+}
