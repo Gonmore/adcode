@@ -1,8 +1,8 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 WORKDIR /workspace
 
-RUN apk add --no-cache libc6-compat wget openssl openssl1.1-compat
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json ./apps/api/package.json
