@@ -95,6 +95,7 @@ model User {
   name          String?
   avatarUrl     String?
   googleSub     String?       @unique
+  passwordHash  String?
   isActive      Boolean       @default(true)
   memberships   Membership[]
   refreshSessions RefreshSession[]

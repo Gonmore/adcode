@@ -1,15 +1,23 @@
-import { PrismaClient } from "@prisma/client";
+﻿import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+
+async function hashPw(pw: string) { return bcrypt.hash(pw, 10); }
 
 async function main() {
   const email = (process.env.PLATFORM_ADMIN_EMAIL || "admin@supernovatel.com").toLowerCase();
   const name = process.env.PLATFORM_ADMIN_NAME || "Platform Admin";
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "Admin123!";
+  const demoPassword = process.env.DEFAULT_USER_PASSWORD || "User123!";
+
+  const adminHash = await hashPw(adminPassword);
+  const demoHash = await hashPw(demoPassword);
 
   const admin = await prisma.user.upsert({
     where: { email },
-    update: { name, isActive: true },
-    create: { email, name, isActive: true },
+    update: { name, isActive: true, passwordHash: adminHash },
+    create: { email, name, isActive: true, passwordHash: adminHash },
   });
 
   const tenant = await prisma.tenant.upsert({
@@ -36,6 +44,16 @@ async function main() {
       update: { name: t.name, allowVipBooking: t.allowVipBooking, discountPercent: t.discountPercent as any, creditLimit: t.creditLimit as any },
       create: { tenantId: tenant.id, name: t.name, type: t.type, allowVipBooking: t.allowVipBooking, discountPercent: t.discountPercent as any, creditLimit: t.creditLimit as any },
     });
+  }
+
+  const contactUser = await prisma.user.upsert({
+    where: { email: "admin.demo@adcode.test" },
+    update: { name: "Admin Demo", isActive: true, passwordHash: demoHash },
+    create: { email: "admin.demo@adcode.test", name: "Admin Demo", isActive: true, passwordHash: demoHash },
+  });
+  const existingContactMembership = await prisma.membership.findFirst({ where: { userId: contactUser.id, tenantId: tenant.id, role: "TENANT_ADMIN" } });
+  if (!existingContactMembership) {
+    await prisma.membership.create({ data: { userId: contactUser.id, tenantId: tenant.id, role: "TENANT_ADMIN", clientTier: "NORMAL" } });
   }
 
   const complex = await prisma.complex.upsert({
@@ -114,14 +132,9 @@ async function main() {
     await prisma.stockLot.create({ data: { productId: product.id, warehouseId: warehouse.id, locationId: loc?.id, qty: 100, unitCost: 3 } });
   }
 
-  console.log(`Seed OK: admin=${admin.email} tenant=${tenant.slug} complex=${complex.slug} scenario=${scenario.name} kiosk=${kiosk.name}`);
+  console.log(`Seed OK: admin=${admin.email} (password: ${adminPassword}) demoTenantAdmin=admin.demo@adcode.test (password: ${demoPassword}) tenant=${tenant.slug} complex=${complex.slug}`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });

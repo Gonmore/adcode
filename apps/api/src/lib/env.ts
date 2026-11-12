@@ -40,6 +40,8 @@ const envSchema = z.object({
   MODULE_EXPIRY_WARN_DAYS: z.coerce.number().default(7),
 
   DEV_LOGIN_ENABLED: z.string().optional(),
+  DEFAULT_ADMIN_PASSWORD: z.string().default("Admin123!"),
+  DEFAULT_USER_PASSWORD: z.string().default("User123!"),
 });
 
 export const env = envSchema.parse(process.env);

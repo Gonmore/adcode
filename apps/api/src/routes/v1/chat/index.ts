@@ -1,11 +1,12 @@
-import type { FastifyInstance } from "fastify";
+﻿import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../../lib/prisma.js";
+import { requireAuth, canManageTenant, isPlatformAdmin } from "../../../lib/auth.js";
 
 export default async function chatRoutes(app: FastifyInstance) {
   app.get("/conversations/:reservationId", async (req, reply) => {
     const { reservationId } = req.params as { reservationId: string };
-    const conv = await prisma.conversation.findUnique({ where: { reservationId }, include: { messages: { orderBy: { createdAt: "asc" }, include: { sender: { select: { id: true, email: true, name: true } } } }, reservation: { select: { id: true, code: true, complexId: true, status: true } } } });
+    const conv = await prisma.conversation.findUnique({ where: { reservationId }, include: { messages: { orderBy: { createdAt: "asc" }, include: { sender: { select: { id: true, email: true, name: true } } } }, reservation: { select: { id: true, code: true, complexId: true, status: true, complex: { select: { tenantId: true } } } } } });
     if (!conv) return reply.code(404).send({ error: "NOT_FOUND", message: "Conversación no encontrada" });
     return { data: conv };
   });

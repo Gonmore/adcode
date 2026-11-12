@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../../lib/prisma.js";
 import { env } from "../../../lib/env.js";
-import { requireAuth } from "../../../lib/auth.js";
+import { requireAuth, isPlatformAdmin } from "../../../lib/auth.js";
 
 const tenantSchema = z.object({
   name: z.string().min(2),
@@ -14,9 +14,7 @@ const tenantSchema = z.object({
 });
 
 function ensurePlatformAdmin(req: any, reply: any) {
-  const user = req.authUser;
-  const ok = user && (user.email?.toLowerCase() === env.PLATFORM_ADMIN_EMAIL.toLowerCase() || user.memberships?.some((m: any) => m.role === "PLATFORM_ADMIN"));
-  if (!ok) {
+  if (!isPlatformAdmin(req.authUser)) {
     reply.code(403).send({ error: "FORBIDDEN", message: "Solo platform admin" });
     return false;
   }
@@ -35,6 +33,25 @@ export default async function platformRoutes(app: FastifyInstance) {
     return { data: tenants };
   });
 
+  // tenant admin / staff: list tenants they belong to
+  app.get("/my-tenants", async (req, reply) => {
+    await requireAuth(req, reply);
+    if (reply.sent) return;
+    const user = req.authUser!;
+    if (isPlatformAdmin(user)) {
+      const tenants = await prisma.tenant.findMany({ include: { complexes: true, subscriptions: true, memberships: { include: { user: { select: { id: true, email: true, name: true } } } } }, orderBy: { createdAt: "desc" } });
+      return { data: tenants };
+    }
+    const tenantIds = Array.from(new Set(user.memberships.map((m) => m.tenantId)));
+    if (!tenantIds.length) return { data: [] };
+    const tenants = await prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      include: { complexes: { include: { scenarios: { include: { pricingRules: true } } } }, subscriptions: true, memberships: { include: { user: { select: { id: true, email: true, name: true } } } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return { data: tenants };
+  });
+
   app.post("/tenants", async (req, reply) => {
     await requireAuth(req, reply);
     if (reply.sent) return;
@@ -48,7 +65,7 @@ export default async function platformRoutes(app: FastifyInstance) {
         name: data.name,
         slug: data.slug,
         contactName: data.contactName,
-        contactEmail: data.contactEmail,
+        contactEmail: data.contactEmail.toLowerCase(),
         contactPhone: data.contactPhone || null,
         maxComplexes: data.maxComplexes,
       },
@@ -61,11 +78,9 @@ export default async function platformRoutes(app: FastifyInstance) {
       { name: "Preferencial", type: "PREFERENCIAL" as const, allowVipBooking: true },
     ]) {
       await prisma.clientTier.upsert({
-        where: { type: t.type },
-        update: { tenantId: tenant.id, name: t.name, allowVipBooking: t.allowVipBooking },
+        where: { tenantId_type: { tenantId: tenant.id, type: t.type } },
+        update: { name: t.name, allowVipBooking: t.allowVipBooking },
         create: { tenantId: tenant.id, name: t.name, type: t.type, allowVipBooking: t.allowVipBooking },
-      }).catch(async () => {
-        await prisma.clientTier.create({ data: { tenantId: tenant.id, name: t.name, type: t.type, allowVipBooking: t.allowVipBooking } as any }).catch(() => {});
       });
     }
 
@@ -89,11 +104,14 @@ export default async function platformRoutes(app: FastifyInstance) {
   app.get("/tenants/:id", async (req, reply) => {
     await requireAuth(req, reply);
     if (reply.sent) return;
-    if (!ensurePlatformAdmin(req, reply)) return;
     const { id } = req.params as { id: string };
+    const user = req.authUser!;
+    if (!isPlatformAdmin(user) && !user.memberships.some((m) => m.tenantId === id)) {
+      return reply.code(403).send({ error: "FORBIDDEN", message: "Sin permisos" });
+    }
     const tenant = await prisma.tenant.findUnique({
       where: { id },
-      include: { complexes: true, subscriptions: true, memberships: { include: { user: { select: { id: true, email: true, name: true } } } } },
+      include: { complexes: { include: { scenarios: { include: { pricingRules: true } } } }, subscriptions: true, memberships: { include: { user: { select: { id: true, email: true, name: true } } } } },
     });
     if (!tenant) return reply.code(404).send({ error: "NOT_FOUND", message: "Tenant no encontrado" });
     return { data: tenant };
