@@ -112,3 +112,16 @@ Incluido en esta base:
 - documentación inicial y bitácora
 
 Pendiente (fases siguientes): implementación completa de auth Google, RBAC/módulos en runtime, CRUDs de dominio, motor de reservas/chat/pagos, inventario/ventas, reportes reales, notificaciones, tests y migraciones SQL avanzadas (exclusion constraints, etc.).
+
+## Actualización 2026-11-13 (departamentos, notificaciones y reservas)
+- **Departamentos:** `Complex.department` (catálogo Bolivia, default `Santa Cruz`) y `User.lastDepartment` (preferencia recordada/cambiable). API filtra por `?department=`; web muestra modal de selección y filtra complejos/escenarios.
+- **Usuarios/membresías:** `COMPLEX_ADMIN`/`SELLER` requieren `complexIds`; `CLIENT` usa `clientTier` (Habitual/Preferencial/Normal). Teléfono/WhatsApp en `User.phone` (coordinación externa, sin envío desde sistema).
+- **Reservas sin prepago:** `Complex.allowClientPayLater` (habilitado por admin de complejo). Clientes Habitual/Preferencial pueden reservar sin prepago cuando está habilitado; backend valida y registra transacción/crédito según flujo.
+- **Reservas fijas (series):** `Reservation.seriesId`, creación recurrente semanal, cancelación de serie por cliente/staff y marcado de falta (`no-show`) por staff con opción de cancelar ocurrencias futuras.
+- **Notificaciones in-app:** modelo `Notification`, endpoints `/notifications` (listar/contar no leídas, marcar leídas). Se generan al crear reserva y al confirmar pago para cliente y staff del complejo; UI con badges/listado en grilla.
+- **Migraciones Prisma:** `20261113155000_add_department_fields`, `20261113162000_add_notifications_and_pay_later` (incluyen además `User.phone` y `Reservation.seriesId` si no existían en entorno). `deploy.sh` aplica `migrate deploy` en producción.
+
+
+## Actualización 2026-11-18
+- Nuevos endpoints: DELETE /inventory/products/:id; POST /platform/tenants/:id/reset-admin-password; PATCH /auth/me; POST /auth/change-password (currentPassword opcional para cuentas sin password); mantenimientos con tipos MONTHLY/QUARTERLY/SEMIANNUAL/ANNUAL y repeatCount; availability incluye clientName/people/note/membership en blocks.
+- UI: gran vistas por rol con sub-pestañas, modales de venta/inventario/mantenimiento/reserva/historial.

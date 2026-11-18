@@ -61,3 +61,35 @@ Registro de cambios, decisiones y pendientes del proyecto.
 6. Ventas e inventario: kioscos, menú digital, POS, almacenes/lotes FEFO, movimientos/proveedores/alertas y reservas de stock.
 7. Reportes desde `FinancialTransaction`, exportes y dashboards; notificaciones.
 8. Pruebas (unit/integración/E2E/PWA), endurecimiento de seguridad, iconos PWA finales y validación de despliegue real.
+## 2026-11-13 - Departamentos, usuarios, notificaciones in-app y reservas (local)
+### Cambios
+- **Schema/migraciones (local aplicadas y registradas):** `Complex.department` (default `Santa Cruz`), `User.lastDepartment`, `Complex.allowClientPayLater`, modelo `Notification`. Migraciones: `20261113155000_add_department_fields`, `20261113162000_add_notifications_and_pay_later`. Seed demo actualizado (complejo con departamento Santa Cruz).
+- **API:** complejos con `department`/`allowClientPayLater` y filtro `?department=`; `PATCH /auth/me/preferences` (lastDepartment); usuarios/membresías validan complejo obligatorio para `COMPLEX_ADMIN`/`SELLER`, tier solo `CLIENT`, teléfono/WhatsApp; notificaciones `/notifications` (listar/leer); reservas crean notificaciones in-app a cliente y staff al crear y al confirmar pago, `payLater` solo Habitual/Preferencial si el complejo lo habilita; endpoints `POST /reservations/:id/no-show`, `/reservations/:id/cancel`, `/reservations/series/:seriesId/cancel` y mejora de `/reservations/recurring` (notifica serie).
+- **Web:** selección de departamento (modal) con recordatorio y cambio (`/auth/me/preferences` + localStorage), listado de complejos/escenarios filtrado por departamento; admin complejo con departamento y flag sin-prepago; formulario usuarios corrige asignación de complejos por rol y visibilidad de tipo cliente; home/panel con grilla y badges de notificaciones in-app.
+- **Docs:** `API_REFERENCE.md` actualizado; `deploy.sh` compatible (usa `prisma migrate deploy`).
+
+### Notas
+- Migraciones aplicadas en `postgres-local` (localhost:5433, db `adcode`) y registradas en `_prisma_migrations`. Prisma Client regenerado en `api-adcode-dev`.
+- WhatsApp no se envía desde el sistema (se usa teléfono registrado para coordinación externa). Notificaciones: in-app. SMTP/OAuth/S3 se probarán/configurarán en producción según indicación.
+- Pendiente validar en UI: regla exacta de “falta” (acción staff) y ajustes finos de UX; pruebas E2E y producción vía `deploy.sh`.
+
+
+## 2026-11-18 - Ajustes de UI/roles, ventas, inventario, mantenimiento, historial
+
+### Cambios principales
+- **Roles y permisos**: platform admin crea/edita/desactiva tenants (con cuota de complejos y reinicio de contraseña del admin de tenant); tenant admin gestiona complejos/escenarios/admins; admin de complejo gestiona su complejo (reservas, productos, inventario, ventas, mantenimientos, vendedores); vendedor gestiona reservas/ventas. Tenant inactivo = solo lectura. Endpoints con guards `assertTenantActive` y helpers `isTenantAdmin`, `managedComplexIds`.
+- **UI por rol (mobile-first)**: menú hamburguesa con opciones por rol, home con grid de gran vistas (Complejo, Ventas, Reportes, Usuarios, Complejos, Historial, Tenants) con emojis y colores, sub-pestañas horizontales dentro de cada vista.
+- **Escenarios**: formulario con campos condicionales por formato (por hora día/noche, por persona adulto/niño con edad, mixto, bloque fijo con tipo y precio), horarios entre semana y fin de semana configurables en el complejo.
+- **Reservas**: calendario semanal (horas vertical, días horizontal), reservas pasadas visibles pero sin crear en slots pasados, estados en español, modal de reserva con calendario/+ por slot, estado seleccionable, cliente buscable o nuevo, cantidad de horas.
+- **Ventas**: menú digital con QR, grilla de productos (foto, nombre, precio verde) con carrito (+/-), modal de confirmación (efectivo/QR/mixto, cálculo de cambio, carga de comprobante), historial.
+- **Inventario**: almacenes/ubicaciones con modales de creación e importación CSV, stock por presentación con −/#/+, bajas (vencimiento/daño/otro), movimientos entre almacenes multi-línea, movimientos recientes con usuario.
+- **Mantenimiento**: tipos único/semanal/mensual/trimestral/semestral/anual con generación de ocurrencias.
+- **Historial**: lista de ingresos (ventas y reservas) con recibo (WhatsApp/PDF) y anulación (ventas mismo día; reservas antes de finalizar).
+- **Perfil de usuario**: modal "Editar perfil" (nombre, foto, contraseña) y reinicio de contraseña por platform admin.
+- **Codificación**: corregido mojibake (UTF-8 español latino) en web y API.
+- **Modales**: backdrop opaco/desenfocado, indicadores en inputs.
+
+### Pendientes
+- Envío de correo/link de activación y cambio obligatorio de contraseña en primer uso.
+- Carga de foto por S3 presign en el modal de perfil/producto (hoy URL + upload local).
+- Pruebas automatizadas y validación SMTP/Google OAuth/S3 en producción.

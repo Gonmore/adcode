@@ -1,6 +1,7 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+﻿import type { FastifyReply, FastifyRequest } from "fastify";
 import { hasPermission, type Permission, type Role } from "@adcode/shared";
 import { env } from "./env.js";
+import { prisma } from "./prisma.js";
 import { getAuthUserFromRequest } from "./session.js";
 
 export type AuthUser = {
@@ -48,10 +49,20 @@ export function requirePermission(permission: Permission) {
   };
 }
 
+export function hasTenantRole(user: AuthUser | null | undefined, tenantId: string, roles: Role[]) {
+  if (!user) return false;
+  if (isPlatformAdmin(user)) return true;
+  return user.memberships.some((m) => m.tenantId === tenantId && roles.includes(m.role));
+}
+
+export function isTenantAdmin(user: AuthUser | null | undefined, tenantId: string) {
+  return hasTenantRole(user, tenantId, ["TENANT_ADMIN"]);
+}
+
 export function canManageTenant(user: AuthUser | null | undefined, tenantId: string) {
   if (!user) return false;
   if (isPlatformAdmin(user)) return true;
-  return user.memberships.some((m) => m.tenantId === tenantId && ["TENANT_ADMIN", "COMPLEX_ADMIN"].includes(m.role as any));
+  return user.memberships.some((m) => m.tenantId === tenantId && ["TENANT_ADMIN", "COMPLEX_ADMIN"].includes(m.role));
 }
 
 export function canManageComplex(user: AuthUser | null | undefined, tenantId: string, complexId?: string) {
@@ -60,8 +71,28 @@ export function canManageComplex(user: AuthUser | null | undefined, tenantId: st
   return user.memberships.some((m) => {
     if (m.tenantId !== tenantId) return false;
     if (m.role === "TENANT_ADMIN") return true;
-    if (m.role === "COMPLEX_ADMIN") return !complexId || !m.complexIds?.length || m.complexIds.includes(complexId);
-    if (m.role === "SELLER") return !complexId || !m.complexIds?.length || m.complexIds.includes(complexId);
+    if (m.role === "COMPLEX_ADMIN" || m.role === "SELLER") return !complexId || !m.complexIds?.length || m.complexIds.includes(complexId);
     return false;
   });
+}
+
+export function managedComplexIds(user: AuthUser | null | undefined, tenantId: string): string[] | null {
+  if (!user) return [];
+  if (isPlatformAdmin(user)) return null;
+  const ms = user.memberships.filter((m) => m.tenantId === tenantId);
+  if (ms.some((m) => m.role === "TENANT_ADMIN")) return null;
+  const ids = new Set<string>();
+  for (const m of ms) {
+    if (m.role === "COMPLEX_ADMIN" || m.role === "SELLER") for (const id of m.complexIds || []) ids.add(id);
+  }
+  return Array.from(ids);
+}
+
+export async function assertTenantActive(tenantId: string, reply?: FastifyReply) {
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
+  const active = t?.status === "ACTIVE";
+  if (!active && reply) {
+    reply.code(403).send({ error: "TENANT_INACTIVE", message: "Tenant inactivo: solo lectura." });
+  }
+  return active;
 }

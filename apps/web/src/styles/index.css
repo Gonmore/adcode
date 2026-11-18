@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -8,8 +8,8 @@
 
 html, body, #root {
   height: 100%;
+  overflow-x: hidden;
 }
-
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
@@ -19,5 +19,27 @@ body {
 
 .dark body {
   background: #020617;
+  color: #e2e8f0;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+.dark select,
+.dark option,
+.dark input,
+.dark textarea {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.dark select option {
+  background-color: #0f172a;
   color: #e2e8f0;
 }

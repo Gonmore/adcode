@@ -58,11 +58,12 @@ async function main() {
 
   const complex = await prisma.complex.upsert({
     where: { tenantId_slug: { tenantId: tenant.id, slug: "central" } },
-    update: { name: "Complejo Central", timezone: "America/La_Paz", currency: "BOB", nightStart: "18:00", nightEnd: "06:00", isActive: true },
+    update: { name: "Complejo Central", department: "Santa Cruz", timezone: "America/La_Paz", currency: "BOB", nightStart: "18:00", nightEnd: "06:00", isActive: true },
     create: {
       tenantId: tenant.id,
       name: "Complejo Central",
       slug: "central",
+      department: "Santa Cruz",
       timezone: "America/La_Paz",
       currency: "BOB",
       nightStart: "18:00",

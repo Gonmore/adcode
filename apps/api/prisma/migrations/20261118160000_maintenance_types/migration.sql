@@ -1,0 +1,5 @@
+-- AlterEnum: add new maintenance types
+ALTER TYPE "MaintenanceType" ADD VALUE IF NOT EXISTS 'MONTHLY';
+ALTER TYPE "MaintenanceType" ADD VALUE IF NOT EXISTS 'QUARTERLY';
+ALTER TYPE "MaintenanceType" ADD VALUE IF NOT EXISTS 'SEMIANNUAL';
+ALTER TYPE "MaintenanceType" ADD VALUE IF NOT EXISTS 'ANNUAL';

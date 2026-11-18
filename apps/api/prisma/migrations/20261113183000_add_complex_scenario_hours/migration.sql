@@ -1,0 +1,8 @@
+﻿-- Complex operating hours
+ALTER TABLE "Complex" ADD COLUMN IF NOT EXISTS "openTime" TEXT NOT NULL DEFAULT '08:00';
+ALTER TABLE "Complex" ADD COLUMN IF NOT EXISTS "closeTime" TEXT NOT NULL DEFAULT '22:00';
+
+-- Scenario availability schedule
+ALTER TABLE "Scenario" ADD COLUMN IF NOT EXISTS "openTime" TEXT;
+ALTER TABLE "Scenario" ADD COLUMN IF NOT EXISTS "closeTime" TEXT;
+ALTER TABLE "Scenario" ADD COLUMN IF NOT EXISTS "availableDays" INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]::INTEGER[];

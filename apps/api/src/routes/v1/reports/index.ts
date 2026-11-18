@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../../lib/prisma.js";
 import { requireAuth, canManageTenant, isPlatformAdmin } from "../../../lib/auth.js";
@@ -65,4 +65,31 @@ export default async function reportsRoutes(app: FastifyInstance) {
       return reply.code(503).send({ error: "DB_NOT_READY", message: "Base de datos no disponible/migrada" });
     }
   });
+
+  app.get("/by-source", async (req, reply) => {
+    await requireAuth(req, reply); if (reply.sent) return;
+    const q = z.object({ complexId: z.string().optional(), from: z.string().datetime().optional(), to: z.string().datetime().optional() }).safeParse(req.query || {});
+    if (!q.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Parámetros inválidos" });
+    try {
+      const where: any = {};
+      if (q.data.complexId) where.complexId = q.data.complexId;
+      if (!isPlatformAdmin(req.authUser)) {
+        const tenantIds = Array.from(new Set((req.authUser?.memberships || []).map((m: any) => m.tenantId)));
+        where.complex = { tenantId: { in: tenantIds } };
+      }
+      if (q.data.from || q.data.to) where.occurredAt = { ...(q.data.from ? { gte: new Date(q.data.from) } : {}), ...(q.data.to ? { lte: new Date(q.data.to) } : {}) };
+      const rows = await prisma.financialTransaction.findMany({ where });
+      const map = new Map<string, { source: string; type: string; amount: number }>();
+      for (const r of rows) {
+        const k = r.source + ':' + r.type;
+        const b = map.get(k) || { source: String(r.source), type: String(r.type), amount: 0 };
+        b.amount += Number(r.amount || 0); map.set(k, b);
+      }
+      return { data: Array.from(map.values()).sort((a,b)=>b.amount-a.amount) };
+    } catch (err) {
+      app.log.warn({ err }, "Failed by-source report");
+      return reply.code(503).send({ error: "DB_NOT_READY", message: "Base de datos no disponible/migrada" });
+    }
+  });
+
 }

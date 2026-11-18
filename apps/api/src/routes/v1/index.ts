@@ -10,6 +10,8 @@ import reportsRoutes from "./reports/index.js";
 import uploadsRoutes from "./uploads/index.js";
 import usersRoutes from "./users/index.js";
 import chatRoutes from "./chat/index.js";
+import notificationsRoutes from "./notifications/index.js";
+import maintenancesRoutes from "./maintenances/index.js";
 
 export default async function v1Routes(app: FastifyInstance) {
   app.get("/", async () => {
@@ -31,6 +33,8 @@ export default async function v1Routes(app: FastifyInstance) {
   await app.register(uploadsRoutes, { prefix: "/uploads" });
   await app.register(usersRoutes, { prefix: "/users" });
   await app.register(chatRoutes, { prefix: "/chat" });
+  await app.register(notificationsRoutes, { prefix: "/notifications" });
+  await app.register(maintenancesRoutes, { prefix: "/maintenances" });
 
   app.get("/tenants", async (_req, reply) => reply.redirect("/api/v1/platform/tenants"));
 }

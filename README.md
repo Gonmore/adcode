@@ -1,93 +1,59 @@
-﻿# README - AdCoDe v1.0 (pruebas)
+﻿# AdCoDe (Administración de Complejos Deportivos)
 
-Plataforma monorepo dockerizada para administraciÃ³n de complejos deportivos (multi-tenant, PWA): tenants/complejos, usuarios/roles, escenarios/precios/disponibilidad, reservas con hold y confirmaciÃ³n de pago/chat, ventas/inventario bÃ¡sico y reportes.
+Monorepo para la plataforma AdCoDe v1.0 (pruebas/desarrollo y despliegue en Docker), alineado con el plan: **Node.js + TypeScript + Fastify + Prisma/PostgreSQL** (API), **React + Vite + TypeScript + Tailwind + React Router + TanStack Query + PWA** (Web), y paquete compartido `@adcode/shared` (enums, permisos, schemas, pricing).
 
-## Stack
-- **API**: Node.js 20, TypeScript, Fastify, Prisma, PostgreSQL
-- **Web**: React + Vite + TypeScript, Tailwind, PWA
-- **Shared**: `@adcode/shared` (enums, permisos, schemas zod, pricing)
-- **Infra**: Docker Compose, Nginx, S3 compatible (MinIO en prod existente)
+- Dominio: `https://adcode.supernovatel.com` (producción)
+- Infra existente: PostgreSQL (`postgres-principal` / `postgres-local`), MinIO, Nginx Proxy Manager
 
-## Requisitos (desarrollo local)
-- Docker Desktop + Docker Compose
-- Red Docker externa `red-desarrollo` disponible
-- PostgreSQL existente en contenedor `postgres-local` (postgres:15-alpine, host `5433->5432`) accesible desde `red-desarrollo`
-- Node.js/npm opcional si vas a ejecutar comandos fuera de Docker
+## Estructura
+- `apps/api` (`@adcode/api`): API Fastify (`/api/v1`), Prisma schema/migraciones/seed
+- `apps/web` (`@adcode/web`): SPA/PWA (Vite), runtime config `window.__APP_CONFIG__` via `public/env.js` + `docker-entrypoint.sh`
+- `packages/shared` (`@adcode/shared`): contratos y utilidades compartidas
+- `docker-compose.local.yml`: solo `api-adcode` y `web-adcode` (usa servicios existentes)
+- `docker-compose.prod.yml`: `api-adcode`, `web-adcode`, `api-migrate`, `api-seed` (red externa)
 
-## Instrucciones paso a paso para iniciar pruebas en desarrollo
+## Requisitos
+- Docker Desktop + red externa `red-desarrollo` y contenedor `postgres-local` (PostgreSQL 15) activos
+- Node.js/npm (opcional para scripts locales fuera de contenedores)
 
-### 1) Preparar configuraciÃ³n
-1. Copia variables de entorno:
-   - `Copy-Item .env.example .env` (PowerShell) o crea `.env` manualmente.
-2. Revisa/ajusta en `.env` (valores importantes para local con Docker Compose):
-   - `DATABASE_URL=postgresql://postgres:postgres@postgres-local:5432/adcode?schema=public`
-     - Usa `postgres-local:5432` cuando `api-adcode` corre dentro de Docker en la red `red-desarrollo`.
-     - Si ejecutas API fuera de Docker, usa `localhost:5433`.
-   - `PLATFORM_ADMIN_EMAIL=admin@supernovatel.com`
-   - `DEFAULT_ADMIN_PASSWORD` / `DEFAULT_USER_PASSWORD` (passwords de seed/cuentas de prueba).
-   - S3 vacÃ­o en local (uploads deshabilitados): `S3_ENDPOINT=`, `S3_ACCESS_KEY=`, `S3_SECRET_KEY=`.
-3. Verifica red Docker:
-   - `docker network ls` debe incluir `red-desarrollo`.
+## Inicio rápido local
+1. Crear/ajustar `.env` desde `.env.example` (DB apunta a `postgres-local` por red Docker: `postgresql://postgres:postgres@postgres-local:5432/adcode?schema=public`).
+2. Levantar: `docker compose -f docker-compose.local.yml up -d --build`
+3. La API en dev ejecuta `prisma generate`, `migrate deploy` (best-effort) y `seed` (best-effort) al iniciar; para forzar: `docker compose -f docker-compose.local.yml exec api npx prisma migrate deploy --schema apps/api/prisma/schema.prisma` y `docker compose -f docker-compose.local.yml exec api npm run db:seed --workspace @adcode/api`
+4. URLs: Web `http://localhost:4173`, API `http://localhost:4100/api/v1/health`
 
-### 2) Preparar base de datos `adcode` en PostgreSQL local existente
-> Ya existe `postgres-local` en tu entorno; no se levanta postgres desde este compose.
+## Funcionalidad implementada (pruebas locales)
+- **Auth:** email+contraseña (`/auth/login`, `/auth/set-password`, `/auth/change-password`), sesión/refresh/logout, `/auth/me`; Google OAuth pendiente (501 si no configurado). Invitado para vistas públicas/reserva.
+- **Departamentos (Bolivia):** `Complex.department` (default `Santa Cruz`), filtro en API/web, modal de selección para cliente con recordatorio (`lastDepartment` en usuario + localStorage) y cambio en cualquier momento.
+- **Tenants/Complejos/Escenarios/Usuarios:** CRUD y gestión por permisos/tenant. Complejo incluye `department` y `allowClientPayLater` (habilita reservas sin prepago Habitual/VIP por admin de complejo).
+- **Usuarios/membresías:** `COMPLEX_ADMIN`/`SELLER` requieren complejo(s) asignado(s); tipo de cliente solo para rol `CLIENT`; teléfono/WhatsApp soportado.
+- **Reservas:** creación con hold/pricing y anti-solape; reservas fijas recurrentes (`seriesId`, `/reservations/recurring`); sin prepago para Habitual/Preferencial si el complejo lo permite. Acciones staff: confirmar/rechazar pago, cancelar, marcar falta (`no-show`) con opción de cancelar futuras de la serie, cancelar serie.
+- **Notificaciones in-app:** a cliente y admin/vendedor del complejo al crear reserva y al confirmar pago. Panel/home con grilla y badges de conteo; listado y marcar leídas (`/notifications`). WhatsApp se coordina externamente con teléfonos registrados (sin envío desde el sistema).
+- **Otros:** chat/mensajes de reserva, ventas/inventario/reportes básicos, uploads stub (S3 real en prod).
 
-1. Crear base de datos (si no existe):
-   - `docker exec -it postgres-local psql -U postgres -c "CREATE DATABASE adcode;"`
-   - Si el usuario/contraseÃ±a difieren, ajusta `DATABASE_URL` en `.env`.
-2. Aplicar migraciÃ³n inicial (si aÃºn no estÃ¡ aplicada):
-   - OpciÃ³n A (recomendada, con Prisma CLI desde host, requiere Node/npm y deps o `npx`):
-     - `$env:DATABASE_URL="postgresql://postgres:postgres@localhost:5433/adcode?schema=public"`
-     - `npx --yes prisma@5.22.0 migrate deploy --schema apps/api/prisma/schema.prisma`
-   - OpciÃ³n B (SQL directo, ya incluido en repo):
-     - `Get-Content apps/api/prisma/migrations/20261112150000_init/migration.sql | docker exec -i postgres-local psql -U postgres -d adcode`
-     - (Opcional) marcar migraciÃ³n en `_prisma_migrations` si luego usarÃ¡s `migrate deploy`.
-3. Cargar datos demo (tenant/complejo/escenario/precios/kiosco/producto/stock):
-   - OpciÃ³n rÃ¡pida (SQL demo, idempotente en la mayorÃ­a de inserts con `ON CONFLICT DO NOTHING`):
-     - Ejecuta el bloque SQL de seed demo usado en la preparaciÃ³n del repo (ver `bitacora.md`, secciÃ³n v1.0-test) o usa el que incluya tu entorno.
-   - OpciÃ³n Prisma seed (si hay dependencias instaladas en el entorno donde se ejecute):
-     - `$env:DATABASE_URL="postgresql://postgres:postgres@localhost:5433/adcode?schema=public"`
-     - `npm run db:seed` (o `npm run db:seed --workspace @adcode/api`)
+## Cuentas demo (tras seed)
+- Platform: `admin@supernovatel.com` / `Admin123!`
+- Tenant demo: `admin.demo@adcode.test` / `User123!` (tenant `demo-sports`, complejo `central`)
 
-### 3) Levantar la aplicaciÃ³n (API + Web)
-1. Desde la raÃ­z del repo:
-   - `docker compose -f docker-compose.local.yml up --build`
-2. Espera a que `api-adcode-dev` quede healthy y `web-adcode-dev` inicie.
-3. Accesos:
-   - API health: `http://localhost:4100/api/v1/health`
-   - API raÃ­z v1: `http://localhost:4100/api/v1`
-   - Web (PWA dev): `http://localhost:4173`
+## Pruebas sugeridas
+1. Web `http://localhost:4173`: login, selección/cambio de departamento, ver complejos filtrados.
+2. Admin → Complejos: crear/editar con departamento y “Permitir reservas sin prepago a Habitual/VIP”.
+3. Admin → Usuarios: crear `COMPLEX_ADMIN`/`SELLER` con complejo obligatorio y teléfono; crear `CLIENT` con tipo Habitual/Preferencial.
+4. `/c/:slug`: crear reserva normal y reserva fija semanal; como Habitual/Preferencial con complejo habilitado, probar sin prepago.
+5. Admin → Reservas: confirmar/rechazar pago, cancelar, marcar falta (y cancelar serie futura). Ver badges/notificaciones in-app.
+6. API: `GET /api/v1/health`, `GET /api/v1/complexes?department=Santa%20Cruz`, `GET /api/v1/notifications` (auth).
 
-> El comando de `api-adcode` intenta `npm install`, `prisma generate`, `migrate deploy` y `seed` al iniciar (con tolerancia a fallos de migrate/seed para no bloquear el arranque si la DB aÃºn no estÃ¡ lista). Si la DB/migraciÃ³n no estÃ¡ lista, prepara la BD primero (paso 2).
+## Producción (resumen)
+- `docker-compose.prod.yml` en red `${DOCKER_EXTERNAL_NETWORK:-red-interna}` con `postgres-principal`/`minio-principal` y NPM. `.env` en servidor (`~/app-server/proyectos/adcode`).
+- Despliegue: `bash deploy.sh` (build/push, scp compose, `prisma migrate deploy`, up, healthcheck; seed opcional con `RUN_SEED_ON_DEPLOY=1`). Configurar SMTP/OAuth/S3 en `.env` de prod para pruebas de esos servicios.
 
-### 4) Flujo de prueba recomendado (v1.0-test)
-1. **Inicio/Web**: http://localhost:4173. Estado API/auth (email+contraseña habilitado, Google pendiente si no configurado). Navegación invitado disponible.
-2. **Login (email + contraseña)**: dmin@supernovatel.com / Admin123! (platform) · dmin.demo@adcode.test / User123! (tenant demo). Si una cuenta no tiene contraseña, usar "Primera vez / establecer contraseña" (/auth/set-password).
-3. **Panel /admin (según rol)**: resumen y tenants según permisos. Platform admin crea tenants. Tenant/complex admin gestiona complejos, escenarios y usuarios/membresías de su tenant (crear/editar/eliminar) con iconos lineales de color (agregar verde, editar azul, eliminar rojo).
-4. **Complejo demo /c/central**: ver escenarios/menú y crear reserva (guest); devuelve código, estado PENDING_PAYMENT, total y hold.
-5. **API (opcional)**: POST /auth/login, GET /auth/me, GET /platform/my-tenants, GET /complexes/mine, CRUD complejos/escenarios/membresías, GET /reports/summary.
+## Documentación
+- `API_REFERENCE.md`, `ARCHITECTURE.md`, `bitacora.md`
 
-### 5) Notas y limitaciones conocidas (v1.0-test)
-- **Autenticación**: email+contraseña operativa (/auth/login, /auth/set-password, /auth/change-password); /auth/dev-login removido. **Google OAuth** pendiente (/auth/google/* 501 si no configurado). Acceso invitado permitido para vistas públicas/reserva.
-- **UI avanzada**: la web incluye layout PWA/base y pantallas funcionales mÃ­nimas para pruebas (login dev, admin resumen/tenants, complejo demo + creaciÃ³n de reserva, menÃº). CRUDs completos y flujos visuales avanzados (chat completo, calendario avanzado, POS/inventario UI detallada, RBAC UI fino) quedan para siguientes iteraciones.
-- **Dominio API**: implementadas bases operativas y endpoints clave (tenants/complejos/escenarios/reservas/reportes/ventas-inventario bÃ¡sicos/chat/usuarios/uploads stub). Reglas avanzadas completas (anti-solape por constraint DB aplicada, expiraciÃ³n automÃ¡tica por job dedicado, S3 presigned real, pagos parciales/QR compartido completo, FEFO transaccional completo, notificaciones push/email) requieren endurecimiento adicional.
-- **Migraciones**: se incluye migraciÃ³n inicial SQL en `apps/api/prisma/migrations/20261112150000_init/migration.sql` y script manual en `apps/api/prisma/manual/001_constraints.sql` (aplicar segÃºn necesidad tras validar nombres/estado).
-- **Seguridad**: secretos deben ir solo en `.env` (no versionado). Cambiar `JWT_*_SECRET` y credenciales reales antes de producciÃ³n.
 
-## Scripts Ãºtiles
-- `npm run dev:api` / `npm run dev:web`
-- `npm run build`
-- `npm run prisma:generate`
-- `npm run prisma:migrate:dev` / `npm run prisma:migrate:prod`
-- `npm run db:seed`
-
-## DocumentaciÃ³n
-- `ARCHITECTURE.md`: arquitectura, mÃ³dulos, decisiones y despliegue.
-- `API_REFERENCE.md`: referencia de endpoints v1 (estado actual).
-- `bitacora.md`: cambios y pendientes por fecha.
-- `PLAN.md`/documento de plan (si aplica): base funcional y roadmap.
-
-## ProducciÃ³n (resumen)
-- Infra existente: `postgres-principal`, `minio-principal`, Nginx Proxy Manager.
-- App: `api-adcode` y `web-adcode` en `docker-compose.prod.yml` (red `${DOCKER_EXTERNAL_NETWORK:-red-interna}`), dominio `https://adcode.supernovatel.com`.
-- Despliegue manual: `bash deploy.sh` (requiere Docker, acceso SSH/SCP y `.env` en servidor). Ver `ARCHITECTURE.md`.
+## Cambios recientes (2026-11-18)
+- UI mobile-first con menú hamburguesa por rol, home con grid de gran vistas y sub-pestañas.
+- Módulos de ventas/inventario/mantenimiento/historial con modales y carga de comprobantes.
+- Roles y permisos refinados; tenant inactivo = solo lectura.
+- Codificación UTF-8 corregida.
+- Migraciones: `20261116230000_scenario_complex_hours_v3`, `20261118160000_maintenance_types`.

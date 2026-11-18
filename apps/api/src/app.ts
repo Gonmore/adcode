@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import sensible from "@fastify/sensible";
+import multipart from "@fastify/multipart";
 import helmet from "@fastify/helmet";
 import jwt from "@fastify/jwt";
 import healthRoutes from "./routes/health.js";
@@ -27,6 +28,7 @@ export async function buildApp() {
   });
   await app.register(cookie, { hook: "onRequest" });
   await app.register(sensible);
+  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await app.register(helmet, { global: true, contentSecurityPolicy: false });
   await app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
 
@@ -39,10 +41,11 @@ export async function buildApp() {
 
   app.setErrorHandler((error, _req, reply) => {
     app.log.error(error);
-    const status = (error as any).statusCode || 500;
+    const err = error as { statusCode?: number; code?: string; message?: string };
+    const status = err.statusCode || 500;
     reply.status(status).send({
-      error: (error as any).code || "INTERNAL_ERROR",
-      message: error.message || "Internal Server Error",
+      error: err.code || "INTERNAL_ERROR",
+      message: err.message || "Internal Server Error",
     });
   });
 

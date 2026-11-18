@@ -4,7 +4,9 @@ import { env, googleAuthEnabled } from "../../../lib/env.js";
 import { prisma } from "../../../lib/prisma.js";
 import { hashPassword, verifyPassword } from "../../../lib/password.js";
 import { clearSession, getAuthUserFromRequest, issueSession, REFRESH_COOKIE, hashToken, verifyRefreshToken } from "../../../lib/session.js";
-import { isPlatformAdmin } from "../../../lib/auth.js";
+import { isPlatformAdmin, requireAuth } from "../../../lib/auth.js";
+
+const DEPARTMENTS = ["La Paz","Cochabamba","Santa Cruz","Oruro","Potosí","Chuquisaca","Tarija","Beni","Pando"] as const;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -33,7 +35,7 @@ function shapeUser(u: any) {
     tenant: m.tenant ? { id: m.tenant.id, name: m.tenant.name, slug: m.tenant.slug } : undefined,
   }));
   const platformAdmin = u.email?.toLowerCase() === env.PLATFORM_ADMIN_EMAIL.toLowerCase() || memberships.some((m: any) => m.role === "PLATFORM_ADMIN");
-  return { id: u.id, email: u.email, name: u.name, avatarUrl: u.avatarUrl, memberships, isPlatformAdmin: platformAdmin, hasPassword: Boolean(u.passwordHash) };
+  return { id: u.id, email: u.email, name: u.name, phone: u.phone, avatarUrl: u.avatarUrl, lastDepartment: u.lastDepartment || null, memberships, isPlatformAdmin: platformAdmin, hasPassword: Boolean(u.passwordHash), hasGoogle: Boolean(u.googleSub) };
 }
 
 export default async function authRoutes(app: FastifyInstance) {
@@ -75,18 +77,36 @@ export default async function authRoutes(app: FastifyInstance) {
   });
 
   app.post("/change-password", async (req, reply) => {
-    const body = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(6) }).safeParse(req.body || {});
+    const body = z.object({ currentPassword: z.string().optional(), newPassword: z.string().min(6) }).safeParse(req.body || {});
     if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Datos inválidos" });
     const auth = req.authUser || await getAuthUserFromRequest(req);
     if (!auth) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Sesión no iniciada" });
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) return reply.code(404).send({ error: "NOT_FOUND", message: "Usuario no encontrado" });
     if (user.passwordHash) {
+      if (!body.data.currentPassword) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Contraseña actual requerida" });
       const ok = await verifyPassword(body.data.currentPassword, user.passwordHash);
       if (!ok) return reply.code(401).send({ error: "INVALID_CREDENTIALS", message: "Contraseña actual incorrecta" });
+    } else if (user.googleSub) {
+      // Social-only account: allow setting a password explicitly if desired? keep simple: require not necessary but permit set
     }
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.data.newPassword) } });
     return { ok: true };
+  });
+
+  app.patch("/me", async (req, reply) => {
+    await requireAuth(req, reply); if (reply.sent) return;
+    const body = z.object({
+      name: z.string().min(1).max(120).optional().nullable(),
+      avatarUrl: z.string().max(500).optional().nullable(),
+    }).safeParse(req.body || {});
+    if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Datos inválidos" });
+    const data: any = {};
+    if (body.data.name !== undefined) data.name = body.data.name || null;
+    if (body.data.avatarUrl !== undefined) data.avatarUrl = body.data.avatarUrl || null;
+    await prisma.user.update({ where: { id: req.authUser!.id }, data });
+    const full = await loadUserWithMemberships(req.authUser!.id);
+    return { user: shapeUser(full) };
   });
 
   app.get("/google/start", async (_req, reply) => {
@@ -99,11 +119,11 @@ export default async function authRoutes(app: FastifyInstance) {
     return reply.code(501).send({ error: "NOT_IMPLEMENTED", message: "Callback OAuth Google pendiente" });
   });
 
-  app.get("/me", async (req, reply) => {
+  app.get("/me", async (req) => {
     const auth = req.authUser || (await getAuthUserFromRequest(req));
-    if (!auth) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Sesión no iniciada" });
+    if (!auth) return { user: null };
     const full = await loadUserWithMemberships(auth.id);
-    if (!full || !full.isActive) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Sesión no iniciada" });
+    if (!full || !full.isActive) return { user: null };
     return { user: shapeUser(full) };
   });
 
@@ -121,8 +141,19 @@ export default async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.patch("/me/preferences", async (req, reply) => {
+    await requireAuth(req, reply); if (reply.sent) return;
+    const body = z.object({ lastDepartment: z.enum(DEPARTMENTS).nullable().optional() }).safeParse(req.body || {});
+    if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Datos inválidos" });
+    await prisma.user.update({ where: { id: req.authUser!.id }, data: { lastDepartment: body.data.lastDepartment ?? null } });
+    const full = await loadUserWithMemberships(req.authUser!.id);
+    return { user: shapeUser(full) };
+  });
+
   app.post("/logout", async (req, reply) => {
     await clearSession(reply, req);
     return reply.send({ ok: true });
   });
 }
+
+

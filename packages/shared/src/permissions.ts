@@ -45,7 +45,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   COMPLEX_ADMIN: [
     "tenant:staff:manage",
     "tenant:clients:manage",
-    "complex:scenarios:manage",
     "complex:reservations:manage",
     "complex:reservations:create",
     "complex:sales:manage",

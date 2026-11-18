@@ -1,70 +1,40 @@
-# API_REFERENCE - AdCoDe (v1)
+﻿## Usuarios/Membresías (`/users`)
+- `GET /users/memberships?tenantId=&role=` - listar (auth + permisos tenant)
+- `POST /users/memberships` - crear/asignar usuario+membresía `{ tenantId,email,name?,phone?,role,complexIds,clientTier }` (auth + permisos tenant). `COMPLEX_ADMIN`/`SELLER` requieren `complexIds`; `CLIENT` usa `clientTier` y no `complexIds`.
+- `PATCH /users/memberships/:id` - actualizar rol/tier/complexIds/teléfono (auth + permisos tenant)
+- `DELETE /users/memberships/:id` - eliminar membresía (auth + permisos tenant)
 
-Base URL: `/api/v1` (mismo origen detrás de Nginx/proxy web en despliegue)
-
-> Estado: scaffold funcional inicial. Endpoints de dominio están parcialmente implementados como placeholders y evolucionarán por fases.
-
-## Convenciones
-- Formato: JSON (`application/json`) salvo uploads/SSE.
-- Autenticación (plan): Access JWT Bearer + refresh token en cookie httpOnly (rotación).
-- Multi-tenancy: operaciones de negocio scoped por tenant/complejo según rol y membresía.
-- Errores: `{ "error": "CODE", "message": "..." }` (puede incluir `warning`/`note` en placeholders).
-- Fechas: ISO-8601 en UTC; cálculos de disponibilidad según timezone del complejo.
-
-## Salud y metadata
-### `GET /health`
-Estado del servicio.
-
-### `GET /`
-Metadata básica de API.
-
-## Autenticación (`/auth`)
-- `GET /auth/config` - estado de configuración auth (`googleAuthEnabled`, `platformAdminEmail`)
-- `GET /auth/google/start` - inicia OAuth2 (PKCE) *(501 si no configurado / pendiente)*
-- `GET /auth/google/callback` - callback OAuth *(pendiente)*
-- `GET /auth/me` - usuario autenticado, membresías, permisos *(pendiente, 401 actual)*
-- `POST /auth/refresh` - rotación de refresh token *(pendiente)*
-- `POST /auth/logout` - cierre de sesión *(stub OK)*
-
-## Plataforma (`/platform`) - PLATFORM_ADMIN
-- `GET /platform/tenants` - listar tenants (intenta leer BD; retorna warning si no migrada)
-- `POST /platform/tenants` - crear tenant *(501 pendiente, validación/RBAC/auditoría)*
-- `GET /tenants` - redirección compatibilidad a `/platform/tenants`
-
-## Complejos (`/complexes`)
-- `GET /complexes?tenantId=&slug=` - listar complejos
-- `GET /complexes/:id` - detalle de complejo
-- Endpoints previstos: CRUD, payment settings/QRs, etc.
-
-## Escenarios (`/scenarios`)
-- `GET /scenarios?complexId=` - listar escenarios
-- `GET /scenarios/:id/availability` - disponibilidad *(501 pendiente)*
+## Notificaciones in-app (`/notifications`) - auth requerida
+- `GET /notifications?unread=1` - listar notificaciones del usuario y `unreadCount`
+- `POST /notifications/read` - marcar leídas `{ ids?: string[], all?: boolean }`
 
 ## Reservas (`/reservations`)
-- `GET /reservations?complexId=&scenarioId=&status=` - listar reservas
-- `POST /reservations` - crear reserva/hold *(501 pendiente)*
-- Endpoints previstos: confirmación, VIP, comprobantes, chat, pagos
+- `GET /reservations` - listar (auth requerida, scoped por tenant salvo platform) filtros `complexId,scenarioId,status`
+- `GET /reservations/:id` - detalle por id o código (incluye chat/pagos)
+- `POST /reservations` - crear reserva/hold + pricing `{ scenarioId,startAt,endAt,people?,clientName?,isVip?,note?,payLater? }`. `payLater` permitido solo para clientes `HABITUAL`/`PREFERENCIAL` cuando el complejo tiene `allowClientPayLater=true` (habilitado por admin de complejo). Notifica in-app a cliente y staff del complejo al crear.
+- `POST /reservations/recurring` - crear serie fija `{ scenarioId,startAt,endAt,weekday,weeks,clientName?,note?,payLater? }` (retorna `seriesId`, creadas/conflictos).
+- `POST /reservations/:id/receipt-sent` - marcar comprobante enviado
+- `POST /reservations/:id/confirm-payment` - confirmar pago (auth + gestión). Notifica in-app a cliente y staff.
+- `POST /reservations/:id/reject-payment` - rechazar pago/liberar (auth + gestión)
+- `POST /reservations/:id/no-show` - marcar falta (auth + gestión). `{ cancelSeries?: boolean, note?: string }` cancela futuras de la serie por defecto.
+- `POST /reservations/:id/cancel` - cancelar reserva (cliente dueño o staff)
+- `POST /reservations/series/:seriesId/cancel` - cancelar serie futura (cliente dueño o staff)
 
-## Ventas (`/sales`)
-- `GET /sales/kiosks?complexId=` - listar kioscos
-- `GET /sales/products` *(placeholder)*
-- `GET /sales/orders` *(placeholder)*
+## Complejos (`/complexes`)
+- Campos: `name,slug,department,timezone,currency,nightStart,nightEnd,allowClientPayLater`.
+- `GET /complexes?tenantId=&slug=&department=` - públicos (incluye `departments` catálogo Bolivia). `GET /complexes/mine` auth.
+- `POST /complexes`, `PATCH /complexes/:id`, `DELETE /complexes/:id` (auth + permisos tenant). `allowClientPayLater` habilita/deshabilita reservas sin prepago para Habitual/VIP.
 
-## Inventario (`/inventory`)
-- `GET /inventory/warehouses?complexId=` - listar almacenes
-- `GET /inventory/stock` *(placeholder)*
+## Auth (`/auth`)
+- `POST /auth/login`, `POST /auth/set-password`, `POST /auth/change-password`, `GET /auth/me`, `POST /auth/refresh`, `POST /auth/logout`.
+- `PATCH /auth/me/preferences` - guardar preferencias del usuario `{ lastDepartment }` (recordar/cambiar departamento).
 
-## Reportes (`/reports`) - núcleo
-- `GET /reports/summary` - contadores básicos (tenants/complejos/reservas/transacciones) si BD disponible
-- `GET /reports/income-vs-expense` *(501 pendiente)*
+## Notas
+- Notificaciones: in-app (panel/home con badges y listado). WhatsApp se coordina externamente usando teléfonos registrados (sin envío desde el sistema).
+- Reservas fijas: se mantienen hasta cancelación de serie por cliente o falta (`no-show`) marcada por admin/vendedor.
+- Cuentas demo: `admin@supernovatel.com` / `Admin123!`, `admin.demo@adcode.test` / `User123!` (tras seed).
 
-## Uploads / S3 (previsto)
-- `POST /uploads/presign` - URL firmada PUT (requiere S3 configurado; en local puede estar deshabilitado)
-- `GET /uploads/presign-get?key=` - URL firmada de lectura
-- En desarrollo local actual no se levanta MinIO por docker-compose; usar S3 existente o dejar deshabilitado.
 
-## Notas de implementación
-- El backend debe ser la autoridad de precios, disponibilidad, permisos y stock.
-- Toda acción sensible debe registrar `AuditLog`.
-- Validaciones de entrada con zod (compartido en `@adcode/shared` cuando aplique).
-- Rutas pueden responder `warning: "Database not ready or not migrated"` mientras no existan migraciones/BD accesible.
+## Actualización 2026-11-18
+- Nuevos endpoints: DELETE /inventory/products/:id; POST /platform/tenants/:id/reset-admin-password; PATCH /auth/me; POST /auth/change-password (currentPassword opcional para cuentas sin password); mantenimientos con tipos MONTHLY/QUARTERLY/SEMIANNUAL/ANNUAL y repeatCount; availability incluye clientName/people/note/membership en blocks.
+- UI: gran vistas por rol con sub-pestañas, modales de venta/inventario/mantenimiento/reserva/historial.
