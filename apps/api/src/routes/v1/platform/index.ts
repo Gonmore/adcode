@@ -95,6 +95,8 @@ export default async function platformRoutes(app: FastifyInstance) {
     const parsed = tenantSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: parsed.error.issues[0]?.message || "Datos inválidos" });
     const data = parsed.data;
+    const existingSlug = await prisma.tenant.findUnique({ where: { slug: data.slug } });
+    if (existingSlug) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "El slug ya existe, se generó uno alternativo. Ajusta el nombre." });
 
     const tenant = await prisma.tenant.create({
       data: {

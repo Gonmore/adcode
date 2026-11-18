@@ -186,7 +186,7 @@ function useTheme() {
   return { theme, toggle: ()=>setTheme(t=>t==="dark"?"light":"dark") };
 }
 
-function Layout({ children, me, onLogout, unread, refreshMe, hideHeader }: { children: React.ReactNode; me: Me|null; onLogout: ()=>void; unread: number; refreshMe: ()=>Promise<void>; hideHeader?: boolean }) {
+function Layout({ children, me, onLogout, unread, refreshMe, hideHeader, impersonate, onBackToPlatform }: { children: React.ReactNode; me: Me|null; onLogout: ()=>void; unread: number; refreshMe: ()=>Promise<void>; hideHeader?: boolean; impersonate?: any; onBackToPlatform?: ()=>void; }) {
   const [menuOpen,setMenuOpen]=useState(false); const [userMenuOpen,setUserMenuOpen]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
   const [pName,setPName]=useState(""); const [pAvatar,setPAvatar]=useState("");
@@ -195,10 +195,13 @@ function Layout({ children, me, onLogout, unread, refreshMe, hideHeader }: { chi
   const sntLogo = theme==="dark"?"/brand/snt-blanco.png":"/brand/snt-azul.png";
   const memberships = me?.memberships || [];
   const roles = new Set((memberships as any[]).map((m:any)=>m.role));
-  const isPlatform = !!me?.isPlatformAdmin || roles.has("PLATFORM_ADMIN");
-  const isTenantAdmin = roles.has("TENANT_ADMIN");
-  const isComplexAdmin = roles.has("COMPLEX_ADMIN");
-  const isSeller = roles.has("SELLER");
+  const isPlatform = (!!me?.isPlatformAdmin || roles.has("PLATFORM_ADMIN")) && !impersonate;
+  const effIsTenantAdmin = impersonate ? impersonate.role==="TENANT_ADMIN" : roles.has("TENANT_ADMIN");
+  const effIsComplexAdmin = impersonate ? impersonate.role==="COMPLEX_ADMIN" : roles.has("COMPLEX_ADMIN");
+  const effIsSeller = impersonate ? impersonate.role==="SELLER" : roles.has("SELLER");
+  const isTenantAdmin = effIsTenantAdmin;
+  const isComplexAdmin = effIsComplexAdmin;
+  const isSeller = effIsSeller;
   const nav = [
     ...(isPlatform?[{to:"/admin?tab=tenants",label:"Tenants"}]:[]),
     {to:"/admin?tab=reservas",label:"Complejo"},
@@ -216,7 +219,8 @@ function Layout({ children, me, onLogout, unread, refreshMe, hideHeader }: { chi
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between gap-3">
         <button className="p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menú" onClick={()=>setMenuOpen(v=>!v)}><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current"/></button>
         <Link to="/" aria-label="Inicio" className="flex items-center gap-2"><img src="/brand/logo.png" alt={cfg.appName} className="h-9 w-9 object-contain"/>{unread>0 && <span className="inline-flex items-center text-xs text-red-600"><Icon.bell className="w-4 h-4"/><Badge count={unread}/></span>}</Link>
-        <div className="relative">
+        <div className="relative flex items-center gap-2">
+          {impersonate && onBackToPlatform && <button onClick={onBackToPlatform} className="rounded-md border px-2 py-1 text-xs" title="Volver a platform admin">⬅️</button>}
           <button className="h-9 w-9 rounded-full bg-brand text-white font-semibold flex items-center justify-center overflow-hidden" onClick={()=>setUserMenuOpen(v=>!v)}>{me?.avatarUrl ? <img src={me.avatarUrl} alt="" className="h-full w-full object-cover"/> : (me?.name||me?.email||"I").slice(0,1).toUpperCase()}</button>
           {userMenuOpen && <div className="absolute right-0 mt-2 w-72 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm">
             <div className="px-3 py-2 text-xs text-slate-500 truncate">{me?me.email:"Invitado (sin sesión)"}</div>
@@ -542,10 +546,10 @@ function ComplexPage({me}:{me:Me|null}){
   </div>);
 }
 
-function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
+function AdminPage({me, unreadCount, impersonate, onImpersonate}:{me:Me|null; unreadCount:number; impersonate?:any; onImpersonate?:(v:any)=>void}){
   const memberships = me?.memberships || [];
   const [searchParams] = useSearchParams();
-  const isPlatform = !!me?.isPlatformAdmin;
+  const isPlatform = !!me?.isPlatformAdmin && !impersonate;
   const tenantRoles = (tid:string)=> memberships.filter((m:any)=>m.tenantId===tid).map((m:any)=>m.role);
   const isTenantAdminFor = (tid:string)=> isPlatform || tenantRoles(tid).includes("TENANT_ADMIN");
   const isComplexAdminFor = (tid:string)=> !isTenantAdminFor(tid) && tenantRoles(tid).includes("COMPLEX_ADMIN");
@@ -555,7 +559,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
   useEffect(()=>{ const t=searchParams.get("tab"); if(t) setTab(t); },[searchParams]); const [tenants,setTenants]=useState<any[]>([]); const [complexes,setComplexes]=useState<any[]>([]);
   const [scenarios,setScenarios]=useState<any[]>([]); const [members,setMembers]=useState<any[]>([]); const [reservations,setReservations]=useState<any[]>([]); const [summary,setSummary]=useState<any>(null);
   const [selTenant,setSelTenant]=useState(""); const [selComplex,setSelComplex]=useState(""); const [resComplex,setResComplex]=useState(""); const [resStatus,setResStatus]=useState(""); const [msg,setMsg]=useState(""); const [err,setErr]=useState("");
-  const [tForm,setTForm]=useState({name:"",slug:"",contactName:"",contactEmail:"",maxComplexes:1}); const [tEdit,setTEdit]=useState<any>(null);
+  const [tForm,setTForm]=useState({name:"",slug:"",contactName:"",contactEmail:"",maxComplexes:1}); const [tenantModalOpen,setTenantModalOpen]=useState(false); const [tEdit,setTEdit]=useState<any>(null);
   const [cForm,setCForm]=useState<any>({name:"",slug:"",department:"Santa Cruz",timezone:"America/La_Paz",currency:"BOB",openTime:"08:00",closeTime:"22:00",weekendOpenTime:"",weekendCloseTime:"",allowClientPayLater:false}); const [cEdit,setCEdit]=useState<any>(null);
   const [sForm,setSForm]=useState<any>({name:"",rentalFormat:"PER_HOUR",priceDay:80,priceNight:100,priceAdult:0,priceChild:0,childAge:10,basePrice:0,blockType:"DAY",openTime:"",closeTime:"",availableDays:[0,1,2,3,4,5,6]}); const [sEdit,setSEdit]=useState<any>(null);
   const [uForm,setUForm]=useState<any>({email:"",name:"",phone:"",role:"SELLER",clientTier:"NORMAL",complexIds:[] as string[]}); const [uEdit,setUEdit]=useState<any>(null);
@@ -603,7 +607,8 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
       const map: Record<string, any[]> = {}; for(const [id,blocks] of entries) map[id]=blocks as any[]; setCalBlocks(map);
     }catch{ setCalScenarios([]); setCalBlocks({}); }
   }
-  useEffect(()=>{ if(me) loadAll(); },[me?.id]); useEffect(()=>{loadScenarios(selComplex);},[selComplex]); useEffect(()=>{loadMembers(selTenant);},[selTenant]);   useEffect(()=>{ if(me && tab==="reservas"){ loadReservations(resComplex,resStatus); loadCalendar(resComplex,calDate); const tId = complexes.find((c:any)=>c.id===resComplex)?.tenantId; if(tId){ setSelTenant(tId); loadResClients(tId,resComplex); } } },[tab,resComplex,resStatus,calDate,complexes.length]);
+  useEffect(()=>{ if(me) loadAll(); },[me?.id]);
+  useEffect(()=>{ if(impersonate){ setSelTenant(impersonate.tenantId); if(impersonate.complexId){ setResComplex(impersonate.complexId); setSelComplex(impersonate.complexId); } } },[impersonate?.tenantId, impersonate?.complexId]); useEffect(()=>{loadScenarios(selComplex);},[selComplex]); useEffect(()=>{loadMembers(selTenant);},[selTenant]);   useEffect(()=>{ if(me && tab==="reservas"){ loadReservations(resComplex,resStatus); loadCalendar(resComplex,calDate); const tId = complexes.find((c:any)=>c.id===resComplex)?.tenantId; if(tId){ setSelTenant(tId); loadResClients(tId,resComplex); } } },[tab,resComplex,resStatus,calDate,complexes.length]);
   useEffect(()=>{ if(["productos","inventario","ventas","reportes"].includes(tab)){ const cid=resComplex||selComplex; if(cid){ loadSalesData(cid); if(tab==="reportes") loadReports(); } } },[tab,resComplex,selComplex]);
   useEffect(()=>{ if(tab==="escenarios"){ const cid=selComplex||resComplex; if(cid) loadSalesData(cid); } },[tab,selComplex,resComplex]);
 
@@ -640,7 +645,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
   const activeTenantId = selTenant || complexes.find((c:any)=>c.id===(resComplex||selComplex))?.tenantId || tenants[0]?.id || "";
   const activeTenant = tenants.find((t:any)=>t.id===activeTenantId);
   const tenantInactive = activeTenant ? (activeTenant.status && activeTenant.status !== "ACTIVE") : false;
-  const roleCtx = { isPlatform, isTenantAdmin: activeTenantId ? isTenantAdminFor(activeTenantId) : isPlatform, isComplexAdmin: activeTenantId ? isComplexAdminFor(activeTenantId) : false, isSeller: activeTenantId ? isSellerFor(activeTenantId) : false };
+  const roleCtx = impersonate ? { isPlatform: false, isTenantAdmin: impersonate.role==="TENANT_ADMIN", isComplexAdmin: impersonate.role==="COMPLEX_ADMIN", isSeller: impersonate.role==="SELLER" } : { isPlatform, isTenantAdmin: activeTenantId ? isTenantAdminFor(activeTenantId) : isPlatform, isComplexAdmin: activeTenantId ? isComplexAdminFor(activeTenantId) : false, isSeller: activeTenantId ? isSellerFor(activeTenantId) : false };
   const canManageUsers = roleCtx.isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin; // complex admin can create sellers; seller cannot
   const canCreateComplex = roleCtx.isPlatform || roleCtx.isTenantAdmin;
   const canCreateScenario = roleCtx.isPlatform || roleCtx.isTenantAdmin;
@@ -650,11 +655,11 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
   const viewDefs: { key:string; label:string; emoji:string; defaultTab:string; subTabs:[string,string][] }[] = [];
   if (isPlatform) viewDefs.push({ key:"tenants", label:"Tenants", emoji:"🏢", defaultTab:"tenants", subTabs:[["tenants","Tenants"]] });
   if (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller) { const _st:any = [["reservas","Reservas"],["mantenimiento","Mantenimiento"]]; if (isPlatform||roleCtx.isTenantAdmin||roleCtx.isComplexAdmin) { _st.push(["escenarios","Escenarios"],["complejos","Complejos"]); } viewDefs.push({ key:"complejo", label:"Complejo", emoji:"🏟️", defaultTab:"reservas", subTabs:_st }); }
-  if (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller) viewDefs.push({ key:"ventas", label:"Ventas", emoji:"💰", defaultTab:"ventas", subTabs:[["ventas","Ventas"],["productos","Productos"],["inventario","Inventario"]] });
-  if (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller) viewDefs.push({ key:"reportes", label:"Reportes", emoji:"📈", defaultTab:"reportes", subTabs:[["reportes","Del complejo"]] });
-  if (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller) viewDefs.push({ key:"historial", label:"Historial", emoji:"📜", defaultTab:"historial", subTabs:[["historial","Ingresos"]] });
-  if (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin) viewDefs.push({ key:"usuarios", label:"Usuarios", emoji:"👥", defaultTab:"usuarios", subTabs:[["usuarios","Usuarios"]] });
-  if (isPlatform || roleCtx.isTenantAdmin) viewDefs.push({ key:"complejos", label:"Complejos", emoji:"🏗️", defaultTab:"complejos", subTabs:[["complejos","Complejos"]] });
+  if ((!isPlatform || impersonate) && (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller)) viewDefs.push({ key:"ventas", label:"Ventas", emoji:"💰", defaultTab:"ventas", subTabs:[["ventas","Ventas"],["productos","Productos"],["inventario","Inventario"]] });
+  if ((!isPlatform || impersonate) && (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller)) viewDefs.push({ key:"reportes", label:"Reportes", emoji:"📈", defaultTab:"reportes", subTabs:[["reportes","Del complejo"]] });
+  if ((!isPlatform || impersonate) && (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin || roleCtx.isSeller)) viewDefs.push({ key:"historial", label:"Historial", emoji:"📜", defaultTab:"historial", subTabs:[["historial","Ingresos"]] });
+  if ((!isPlatform || impersonate) && (isPlatform || roleCtx.isTenantAdmin || roleCtx.isComplexAdmin)) viewDefs.push({ key:"usuarios", label:"Usuarios", emoji:"👥", defaultTab:"usuarios", subTabs:[["usuarios","Usuarios"]] });
+  if ((!isPlatform || impersonate) && (isPlatform || roleCtx.isTenantAdmin)) viewDefs.push({ key:"complejos", label:"Complejos", emoji:"🏗️", defaultTab:"complejos", subTabs:[["complejos","Complejos"]] });
   const tabs = viewDefs.map(v=>[v.defaultTab, v.emoji+" "+v.label] as [string,string]);
   const currentView = viewDefs.find(v=> v.subTabs.some(st=>st[0]===tab)) || viewDefs[0];
   const subTabs = currentView ? currentView.subTabs : [];
@@ -675,16 +680,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
     {tab==="resumen"&&<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">{[["Tenants",tenants.length],["Complejos",complexes.length],["Reservas",summary?.data?.reservations??"-"],["Ingresos",summary?.data?.income??"-"],["Egresos",summary?.data?.expense??"-"],["Notificaciones",unreadCount]].map(([l,v])=> <div key={String(l)} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4"><div className="text-xs text-slate-500">{l}</div><div className="text-lg font-semibold mt-1 inline-flex items-center">{String(v)}{l==="Notificaciones" && <Badge count={unreadCount}/>}</div></div>)}</div>}
 
     {tab==="tenants"&&me.isPlatformAdmin&&<div className="grid md:grid-cols-2 gap-4">
-      <form onSubmit={e=>run(async()=>{e.preventDefault(); const r=await apiFetch<any>("/platform/tenants",{method:"POST",body:JSON.stringify({...tForm,maxComplexes:Number(tForm.maxComplexes)})}); setTForm({name:"",slug:"",contactName:"",contactEmail:"",maxComplexes:1}); await loadAll(); return r?.notice || (r?.temporaryPassword?`Tenant creado. Contraseña temporal: ${r.temporaryPassword}`:"Tenant creado.");})} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-2">
-        <h2 className="font-medium inline-flex items-center gap-2"><Icon.plus className="w-4 h-4 text-green-700"/> Crear tenant</h2>
-        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Nombre" value={tForm.name} onChange={e=>setTForm({...tForm,name:e.target.value})}/>
-        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="slug" value={tForm.slug} onChange={e=>setTForm({...tForm,slug:e.target.value})}/>
-        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Contacto nombre" value={tForm.contactName} onChange={e=>setTForm({...tForm,contactName:e.target.value})}/>
-        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Contacto email" value={tForm.contactEmail} onChange={e=>setTForm({...tForm,contactEmail:e.target.value})}/>
-        <input type="number" min={1} className="w-full border rounded px-2 py-2 bg-transparent" value={tForm.maxComplexes} onChange={e=>setTForm({...tForm,maxComplexes:Number(e.target.value)})}/>
-        <p className="text-xs text-slate-500">Se crea/asigna el contacto como TENANT_ADMIN. Si el email no tenía cuenta, se genera una contraseña temporal y se muestra arriba para compartirla; el usuario debe cambiarla en su primer ingreso.</p>
-        <button className="rounded-md bg-brand text-white px-4 py-2">Crear tenant</button>
-      </form>
+      <button onClick={()=>{ setTForm({name:"",slug:"",contactName:"",contactEmail:"",maxComplexes:1}); setTenantModalOpen(true); }} className="rounded-md bg-brand text-white px-4 py-2 text-sm mb-3">➕ Nuevo tenant</button>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-2"><h2 className="font-medium">Tenants</h2>
         {tenants.length===0?<p className="text-sm text-slate-500">Sin tenants.</p>:<ul className="text-sm space-y-3">{tenants.map(t=> <li key={t.id} className="border-b pb-2 space-y-1">
           <div className="flex items-center justify-between gap-2 flex-wrap"><div><b>{t.name}</b> <span className="text-slate-500">({t.slug})</span> <span className={`ml-1 text-xs px-2 py-0.5 rounded border ${t.status==="ACTIVE"?"text-green-700 border-green-300":"text-amber-700 border-amber-300"}`}>{t.status||"ACTIVE"}</span></div>
@@ -692,6 +688,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
           <button className="text-xs px-2 py-1 rounded border text-blue-700 border-blue-300 inline-flex items-center gap-1" onClick={()=>run(async()=>{if(!confirm("¿Reiniciar contraseña del admin del tenant? Se generará una contraseña temporal de un uso.")) return; const r=await apiFetch<any>(`/platform/tenants/${t.id}/reset-admin-password`,{method:"POST"}); return r?.notice || `Contraseña temporal: ${r?.temporaryPassword}`;})}><Icon.key className="w-3.5 h-3.5"/> Reiniciar contraseña</button>
           <button className={`text-xs px-2 py-1 rounded border ${t.status==="ACTIVE"?"text-amber-700 border-amber-300":"text-green-700 border-green-300"}`} onClick={()=>run(async()=>{await apiFetch('/platform/tenants/'+t.id,{method:'PATCH',body:JSON.stringify({status:t.status==="ACTIVE"?"INACTIVE":"ACTIVE"})}); await loadAll();}, t.status==="ACTIVE"?"Tenant desactivado (solo lectura).":"Tenant activado.")}>{t.status==="ACTIVE"?"Desactivar":"Activar"}</button></div></div>
           <div className="text-xs text-slate-500">{t.contactName} · {t.contactEmail}{t.contactPhone?(" · "+t.contactPhone):""} · Complejos: {t.complexes?.length||0}/{t.maxComplexes}</div>
+<div className="flex flex-wrap gap-1 items-center text-xs mt-1"><span>Ver como:</span><select className="border rounded px-1 py-0.5 bg-transparent" defaultValue="" onChange={e=>{ (window as any).__viewRole = e.target.value; (window as any).__viewTenant = t.id; }}><option value="">—</option><option value="TENANT_ADMIN">Tenant admin</option><option value="COMPLEX_ADMIN">Admin de complejo</option><option value="SELLER">Vendedor</option></select>{ (t.complexes||[]).length>0 && <select className="border rounded px-1 py-0.5 bg-transparent" defaultValue="" onChange={e=>{ (window as any).__viewComplex = e.target.value; }}><option value="">Complejo</option>{(t.complexes||[]).map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}<button className="px-2 py-0.5 rounded border" onClick={()=>{ const role=(window as any).__viewRole; if(!role){ alert("Elige un rol"); return; } const cid = (role==="TENANT_ADMIN") ? null : ((window as any).__viewComplex || (t.complexes||[])[0]?.id); if(role!=="TENANT_ADMIN" && !cid){ alert("Elige un complejo"); return; } onImpersonate && onImpersonate({role, tenantId:t.id, complexId:cid}); }}>Ver</button></div>
         </li>)}</ul>}
       </div>
       {tEdit && <form onSubmit={e=>run(async()=>{e.preventDefault(); await apiFetch('/platform/tenants/'+tEdit.id,{method:'PATCH',body:JSON.stringify({name:tEdit.name,contactName:tEdit.contactName,contactEmail:tEdit.contactEmail,contactPhone:tEdit.contactPhone||null,maxComplexes:Number(tEdit.maxComplexes),status:tEdit.status})}); setTEdit(null); await loadAll();},"Tenant actualizado.")} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-2"><h2 className="font-medium text-blue-700">Editar tenant</h2>
@@ -705,6 +702,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
     </div>}
 
     {tab==="complejos"&&<div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-sm">Complejos del tenant seleccionado: <b>{complexes.filter((c:any)=>c.tenantId===selTenant||c.tenant?.id===selTenant).length}</b> / <b>{tenants.find((t:any)=>t.id===selTenant)?.maxComplexes||"-"}</b></div>
       {canCreateComplex && <form onSubmit={e=>run(async()=>{e.preventDefault(); const slug = cForm.slug || slugify(cForm.name); if(!slug || slug.length<2) throw new Error("Nombre inválido para generar slug"); const payload={...cForm, slug, tenantId:selTenant, openTime:cForm.openTime||"08:00", closeTime:cForm.closeTime||"22:00", weekendOpenTime:cForm.weekendOpenTime||null, weekendCloseTime:cForm.weekendCloseTime||null}; await apiFetch("/complexes",{method:"POST",body:JSON.stringify(payload)}); setCForm({name:"",slug:"",department:"Santa Cruz",timezone:"America/La_Paz",currency:"BOB",openTime:"08:00",closeTime:"22:00",weekendOpenTime:"",weekendCloseTime:"",allowClientPayLater:false}); await loadAll();},"Complejo creado.")} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-2 max-w-xl">
         <h2 className="font-medium inline-flex items-center gap-2"><Icon.plus className="w-4 h-4 text-green-700"/> Crear complejo</h2>
         <select className="w-full border rounded px-2 py-2 bg-transparent" value={selTenant} onChange={e=>setSelTenant(e.target.value)}>{tenants.map(t=> <option key={t.id} value={t.id}>{t.name}</option>)}</select>
@@ -1070,6 +1068,18 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
       </div>
     </div></div>}
 
+    {tenantModalOpen && <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"><div className="w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-3 max-h-[90vh] overflow-auto">
+      <div className="flex items-center justify-between"><h2 className="font-semibold">➕ Nuevo tenant</h2><button onClick={()=>setTenantModalOpen(false)} className="text-sm px-2 py-1 rounded border">Cerrar</button></div>
+      <div className="space-y-2 text-sm">
+        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Nombre del tenant" value={tForm.name} onChange={e=>{ const name=e.target.value; setTForm({...tForm,name,slug:slugify(name)}); }}/>
+        <div className="text-xs text-slate-500">Slug: <span className="font-mono">{tForm.slug||"—"}</span> (se genera automáticamente)</div>
+        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Contacto nombre" value={tForm.contactName} onChange={e=>setTForm({...tForm,contactName:e.target.value})}/>
+        <input className="w-full border rounded px-2 py-2 bg-transparent" placeholder="Contacto email" value={tForm.contactEmail} onChange={e=>setTForm({...tForm,contactEmail:e.target.value})}/>
+        <div className="space-y-1"><label className="text-xs text-slate-500">Cantidad de complejos</label><div className="flex items-center justify-center gap-3 mt-1"><button type="button" onClick={()=>setTForm({...tForm,maxComplexes:Math.max(1,(tForm.maxComplexes||1)-1)})} className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-xl font-bold flex items-center justify-center">−</button><span className="w-12 text-center font-semibold text-lg">{tForm.maxComplexes}</span><button type="button" onClick={()=>setTForm({...tForm,maxComplexes:(tForm.maxComplexes||0)+1})} className="w-10 h-10 rounded-full bg-emerald-500 text-white text-xl font-bold flex items-center justify-center">+</button></div></div>
+      </div>
+      <button onClick={async()=>{ try{ const r=await apiFetch<any>("/platform/tenants",{method:"POST",body:JSON.stringify({...tForm,maxComplexes:Number(tForm.maxComplexes)})}); setTenantModalOpen(false); setTForm({name:"",slug:"",contactName:"",contactEmail:"",maxComplexes:1}); await loadAll(); if(r?.notice) setMsg(r.notice); else if(r?.temporaryPassword) setMsg(`Tenant creado. Contraseña temporal: ${r.temporaryPassword}`); }catch(e:any){ setErr(e.message||"Error"); } }} className="rounded-md bg-brand text-white px-4 py-2 w-full">Crear tenant</button>
+    </div></div>}
+
   </div>);
 }
 
@@ -1077,6 +1087,7 @@ export default function App(){
   const location = useLocation();
   const navigate = useNavigate();
   const [me,setMe]=useState<Me|null>(null);
+  const [impersonate,setImpersonate]=useState<any>(null);
   const [notifications,setNotifications]=useState<any[]>([]);
   const [unreadCount,setUnreadCount]=useState(0);
   async function refreshMe(){ try{const r=await apiFetch<any>("/auth/me"); setMe(r.user||null);}catch{setMe(null);} }
@@ -1085,11 +1096,11 @@ export default function App(){
   async function logout(){ try{await apiFetch("/auth/logout",{method:"POST"});}catch{} setMe(null); setNotifications([]); setUnreadCount(0); navigate("/"); }
   useEffect(()=>{refreshMe();},[]);
   useEffect(()=>{ if(me) loadNotifications(); else { setNotifications([]); setUnreadCount(0); } },[me?.id]);
-  return (<Layout me={me} onLogout={logout} unread={unreadCount} refreshMe={refreshMe} hideHeader={location.pathname==="/" && !me}><Routes>
+  return (<Layout me={me} onLogout={logout} unread={unreadCount} refreshMe={refreshMe} hideHeader={location.pathname==="/" && !me} impersonate={impersonate} onBackToPlatform={()=>setImpersonate(null)}><Routes>
     <Route path="/" element={<HomePage me={me} refreshMe={refreshMe} unreadCount={unreadCount} notifications={notifications} onReadAll={readAll}/>}/>
     <Route path="/c/:slug" element={<ComplexPage me={me}/>}/>
     <Route path="/menu/:slug" element={<PublicMenuPage/>}/>
-    <Route path="/admin/*" element={<AdminPage me={me} unreadCount={unreadCount}/>}/>
+    <Route path="/admin/*" element={<AdminPage me={me} unreadCount={unreadCount} impersonate={impersonate} onImpersonate={setImpersonate}/>}/>
     <Route path="*" element={<div className="text-sm text-slate-500">Página no encontrada</div>}/>
   </Routes></Layout>);
 }
