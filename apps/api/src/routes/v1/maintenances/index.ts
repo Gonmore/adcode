@@ -50,29 +50,38 @@ export default async function maintenancesRoutes(app: FastifyInstance) {
     const startAt = new Date(body.data.startAt), endAt = new Date(body.data.endAt);
     if (!(endAt > startAt)) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Rango inválido" });
     const cost = body.data.cost != null ? body.data.cost : null;
-    const durationMs = endAt.getTime() - startAt.getTime();
-    const repeatCount = body.data.repeatCount || (body.data.type === "ONE_TIME" ? 1 : body.data.type === "WEEKLY" ? 12 : body.data.type === "MONTHLY" ? 12 : body.data.type === "QUARTERLY" ? 4 : body.data.type === "SEMIANNUAL" ? 2 : 1);
-    const advance = (d: Date, n: number) => {
-      const nd = new Date(d);
-      if (body.data.type === "WEEKLY") nd.setDate(nd.getDate() + 7 * n);
-      else if (body.data.type === "MONTHLY") nd.setMonth(nd.getMonth() + n);
-      else if (body.data.type === "QUARTERLY") nd.setMonth(nd.getMonth() + 3 * n);
-      else if (body.data.type === "SEMIANNUAL") nd.setMonth(nd.getMonth() + 6 * n);
-      else if (body.data.type === "ANNUAL") nd.setFullYear(nd.getFullYear() + n);
-      return nd;
-    };
     const created = await prisma.$transaction(async (tx) => {
-      let first: any = null;
-      for (let i = 0; i < repeatCount; i++) {
-        const s = advance(startAt, i);
-        const e = new Date(s.getTime() + durationMs);
-        const m = await tx.maintenance.create({ data: { complexId: body.data.complexId, scenarioId: body.data.scenarioId || null, type: body.data.type as any, startAt: s, endAt: e, dayOfWeek: body.data.dayOfWeek ?? null, reason: body.data.reason || null, cost: cost as any } });
-        if (i === 0) first = m;
-        if (body.data.registerExpense && cost != null && cost > 0) {
-          await tx.financialTransaction.create({ data: { complexId: body.data.complexId, scenarioId: body.data.scenarioId || null, type: "EXPENSE", source: "MAINTENANCE", amount: cost as any, occurredAt: s, refType: "MAINTENANCE", refId: m.id, note: body.data.reason || "Mantenimiento" } });
+      const m = await tx.maintenance.create({ data: { complexId: body.data.complexId, scenarioId: body.data.scenarioId || null, type: body.data.type as any, startAt, endAt, dayOfWeek: body.data.dayOfWeek ?? null, reason: body.data.reason || null, cost: cost as any } });
+      if (body.data.registerExpense && cost != null && cost > 0) {
+        await tx.financialTransaction.create({ data: { complexId: body.data.complexId, scenarioId: body.data.scenarioId || null, type: "EXPENSE", source: "MAINTENANCE", amount: cost as any, occurredAt: startAt, refType: "MAINTENANCE", refId: m.id, note: body.data.reason || "Mantenimiento" } });
+      }
+      // Programar notificaciones de aviso para mantenimientos recurrentes
+      const recurring = body.data.type !== "ONE_TIME";
+      if (recurring) {
+        // Calcular fecha del siguiente mantenimiento segun periodicidad
+        const next = new Date(startAt);
+        if (body.data.type === "WEEKLY") next.setDate(next.getDate() + 7);
+        else if (body.data.type === "MONTHLY") next.setMonth(next.getMonth() + 1);
+        else if (body.data.type === "QUARTERLY") next.setMonth(next.getMonth() + 3);
+        else if (body.data.type === "SEMIANNUAL") next.setMonth(next.getMonth() + 6);
+        else if (body.data.type === "ANNUAL") next.setFullYear(next.getFullYear() + 1);
+        // Dias de aviso segun periodicidad
+        let noticeDays: number[] = [];
+        if (body.data.type === "WEEKLY" || body.data.type === "MONTHLY") noticeDays = [2];
+        else if (body.data.type === "QUARTERLY" || body.data.type === "SEMIANNUAL") noticeDays = [14, 7];
+        else if (body.data.type === "ANNUAL") noticeDays = [30, 7];
+        const staff = await tx.membership.findMany({ where: { tenantId: cx.tenantId, role: { in: ["TENANT_ADMIN", "COMPLEX_ADMIN", "SELLER"] as any } } });
+        const userIds = Array.from(new Set(staff.map((m:any) => m.userId)));
+        for (const days of noticeDays) {
+          const scheduled = new Date(next.getTime() - days * 24 * 60 * 60 * 1000);
+          if (scheduled > new Date()) {
+            for (const uid of userIds) {
+              await tx.notification.create({ data: { userId: uid, complexId: body.data.complexId, type: "MAINTENANCE_REMINDER", title: "Mantenimiento próximo", body: `El mantenimiento "${body.data.reason || "programado"}" se realizó el ${startAt.toLocaleDateString()} con costo ${cost != null ? cost : "-"}. El siguiente mantenimiento está programado para el ${next.toLocaleDateString()}.`, scheduledAt: scheduled, data: { maintenanceId: m.id, previousCost: cost, nextDate: next.toISOString(), type: body.data.type } as any } });
+            }
+          }
         }
       }
-      return first;
+      return m;
     });
     return reply.code(201).send({ data: created });
   });

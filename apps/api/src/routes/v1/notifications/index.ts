@@ -8,11 +8,11 @@ export default async function notificationsRoutes(app: FastifyInstance) {
     await requireAuth(req, reply); if (reply.sent) return;
     const unread = (req.query as any)?.unread === "1" || (req.query as any)?.unread === "true";
     const data = await prisma.notification.findMany({
-      where: { userId: req.authUser!.id, ...(unread ? { readAt: null } : {}) },
+      where: { userId: req.authUser!.id, ...(unread ? { readAt: null } : {}), OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }] },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    const unreadCount = await prisma.notification.count({ where: { userId: req.authUser!.id, readAt: null } });
+    const unreadCount = await prisma.notification.count({ where: { userId: req.authUser!.id, readAt: null, OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }] } });
     return { data, unreadCount };
   });
 

@@ -688,12 +688,14 @@ model Notification {
   title       String
   body        String
   data        Json?
+  scheduledAt DateTime?
   readAt      DateTime?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   complex     Complex? @relation(fields: [complexId], references: [id], onDelete: SetNull)
 
   @@index([userId, readAt, createdAt])
+  @@index([userId, scheduledAt])
   @@index([complexId, createdAt])
 }
 
