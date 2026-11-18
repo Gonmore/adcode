@@ -171,6 +171,7 @@ model Complex {
   closeTime           String        @default("22:00")
   weekendOpenTime     String?
   weekendCloseTime    String?
+  weeklySchedule      Json?
   allowClientPayLater Boolean       @default(false)
   logoKey             String?
   isActive            Boolean       @default(true)

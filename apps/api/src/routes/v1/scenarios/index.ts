@@ -34,24 +34,31 @@ export default async function scenariosRoutes(app: FastifyInstance) {
       select: { id: true, startAt: true, endAt: true, status: true, clientName: true, people: true, note: true, membershipId: true, reservationSeriesId: true, seriesPaidAt: true, membership: { select: { user: { select: { id: true, name: true, phone: true, email: true } } } } }, orderBy: { startAt: "asc" },
     });
     const maintenances = await prisma.maintenance.findMany({ where: { complexId: scenario.complexId, startAt: { lt: to }, endAt: { gt: from }, OR: [{ scenarioId: id }, { scenarioId: null }] }, select: { id: true, startAt: true, endAt: true, reason: true }, orderBy: { startAt: "asc" } });
+    const weeklySchedule = (scenario.complex as any).weeklySchedule || null;
     const schedule = {
       complexOpenTime: (scenario.complex as any).openTime || "08:00",
       complexCloseTime: (scenario.complex as any).closeTime || "22:00",
       complexWeekendOpenTime: (scenario.complex as any).weekendOpenTime || null,
       complexWeekendCloseTime: (scenario.complex as any).weekendCloseTime || null,
+      weeklySchedule,
       openTime: (scenario as any).openTime || null,
       closeTime: (scenario as any).closeTime || null,
       availableDays: Array.isArray((scenario as any).availableDays) ? (scenario as any).availableDays : [0,1,2,3,4,5,6],
     };
     const closedBlocks: any[] = [];
     const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+    const daySchedule = (d: Date) => weeklySchedule ? (weeklySchedule[String(d.getDay())] || null) : null;
     const openStr = (d: Date) => {
       if ((scenario as any).openTime) return (scenario as any).openTime;
+      const ds = daySchedule(d);
+      if (ds) { if (ds.closed) return null; return ds.open || schedule.complexOpenTime; }
       if (isWeekend(d) && schedule.complexWeekendOpenTime) return schedule.complexWeekendOpenTime;
       return schedule.complexOpenTime;
     };
     const closeStr = (d: Date) => {
       if ((scenario as any).closeTime) return (scenario as any).closeTime;
+      const ds = daySchedule(d);
+      if (ds) { if (ds.closed) return null; return ds.close || schedule.complexCloseTime; }
       if (isWeekend(d) && schedule.complexWeekendCloseTime) return schedule.complexWeekendCloseTime;
       return schedule.complexCloseTime;
     };
@@ -66,6 +73,11 @@ export default async function scenariosRoutes(app: FastifyInstance) {
         continue;
       }
       const os = openStr(d); const cs = closeStr(d);
+      if (os === null || cs === null) {
+        const s = dayStart < from ? from : dayStart; const e = dayEnd > to ? to : dayEnd;
+        if (s < e) closedBlocks.push({ type: "CLOSED", startAt: s.toISOString(), endAt: e.toISOString(), reason: "Complejo cerrado este día" });
+        continue;
+      }
       const [oh,om] = os.split(":").map(Number); const [ch,cm] = cs.split(":").map(Number);
       const openAt = new Date(d); openAt.setHours(oh||0, om||0, 0, 0);
       const closeAt = new Date(d); closeAt.setHours(ch||22, cm||0, 0, 0);
