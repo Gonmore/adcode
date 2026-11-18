@@ -58,13 +58,14 @@ function estimateScenarioPrice(complex:any, scenario:any, date:string, start:str
 function money(v:any, currency?:string){ const n=Number(v||0); return `${n.toFixed(2)} ${currency||"BOB"}`; }
 
 
-function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, onToggle, selectableScenarioId, onPickSlot, onPickSlotScenario, onPickSlotWeek, onShowSlotReservations, weekView }: {
+function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, onToggle, selectableScenarioId, onPickSlot, onPickSlotScenario, onPickSlotWeek, onShowSlotReservations, allowCreate, weekView }: {
   date: string; scenarios: any[]; blocksByScenario: Record<string, any[]>;
   visibleIds?: Record<string, boolean>; onToggle?: (id: string) => void;
   selectableScenarioId?: string; onPickSlot?: (start: string, end: string) => void;
   onPickSlotScenario?: (scenarioId: string, start: string, end: string) => void;
   onPickSlotWeek?: (scenarioId: string, date: string, start: string, end: string) => void;
   onShowSlotReservations?: (blocks: any[]) => void;
+  allowCreate?: boolean;
   weekView?: boolean;
 }) {
   const hours = Array.from({ length: 16 }, (_, i) => i + 7);
@@ -165,7 +166,7 @@ function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, o
                           return <div key={i} className="text-[9px] px-1 py-0.5 rounded text-white truncate" style={{ background: b.type === "CLOSED" ? "#94a3b8" : b.color }} title={`${b.scenario?.name || ""}: ${txt}`}>{b.scenario?.name ? b.scenario.name.slice(0, 8) : ""} {txt}</div>;
                         })}
                       </div>
-                      {!isClosed && new Date(day.getFullYear(), day.getMonth(), day.getDate(), h+1, 0, 0) > new Date() && <button type="button" className="w-6 h-6 self-center shrink-0 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold flex items-center justify-center shadow" onClick={(e) => { e.stopPropagation(); const start = String(h).padStart(2, "0") + ":00"; const end = String(Math.min(h + 1, 23)).padStart(2, "0") + ":00"; const dateStr = day.toISOString().slice(0,10); if (onPickSlotWeek && rows[0]) onPickSlotWeek(rows[0].id, dateStr, start, end); else if (onPickSlotScenario && rows[0]) onPickSlotScenario(rows[0].id, start, end); else if (onPickSlot) onPickSlot(start, end); }} title="Agregar reserva">+</button>}
+                      {!isClosed && (allowCreate!==false) && new Date(day.getFullYear(), day.getMonth(), day.getDate(), h+1, 0, 0) > new Date() && <button type="button" className="w-6 h-6 self-center shrink-0 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold flex items-center justify-center shadow" onClick={(e) => { e.stopPropagation(); const start = String(h).padStart(2, "0") + ":00"; const end = String(Math.min(h + 1, 23)).padStart(2, "0") + ":00"; const dateStr = day.toISOString().slice(0,10); if (onPickSlotWeek && rows[0]) onPickSlotWeek(rows[0].id, dateStr, start, end); else if (onPickSlotScenario && rows[0]) onPickSlotScenario(rows[0].id, start, end); else if (onPickSlot) onPickSlot(start, end); }} title="Agregar reserva">+</button>}
                     </div>
                   </div>
                 );
@@ -752,7 +753,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
           <input type="number" step="0.01" className="border rounded px-2 py-2 bg-transparent" placeholder="Costo (opcional)" value={mForm.cost} onChange={e=>setMForm({...mForm,cost:e.target.value})}/>
           <input className="border rounded px-2 py-2 bg-transparent md:col-span-2" placeholder="Motivo" value={mForm.reason||""} onChange={e=>setMForm({...mForm,reason:e.target.value})}/>
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(mForm.registerExpense)} onChange={e=>setMForm({...mForm,registerExpense:e.target.checked})}/> Registrar costo como egreso</label>
-          <div className="md:col-span-3"><button className="rounded-md bg-brand text-white px-4 py-2">Registrar mantenimiento</button></div>
+          {canManageInventoryProducts && <div className="md:col-span-3"><button className="rounded-md bg-brand text-white px-4 py-2">Registrar mantenimiento</button></div>}
         </form>
         {maintenances.length>0 && <div className="overflow-auto"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="py-2 pr-2">Inicio</th><th className="py-2 pr-2">Fin</th><th className="py-2 pr-2">Escenario</th><th className="py-2 pr-2">Motivo</th><th className="py-2 pr-2">Costo</th><th></th></tr></thead><tbody>{maintenances.map((m:any)=> <tr key={m.id} className="border-b"><td className="py-2 pr-2">{new Date(m.startAt).toLocaleString()}</td><td className="py-2 pr-2">{new Date(m.endAt).toLocaleString()}</td><td className="py-2 pr-2">{m.scenario?.name||"Complejo"}</td><td className="py-2 pr-2">{m.reason||"-"}</td><td className="py-2 pr-2">{m.cost!=null?Number(m.cost):"-"}</td><td className="py-2"><button className="text-xs text-red-700 underline" onClick={()=>run(async()=>{if(!confirm("Eliminar mantenimiento?"))return; await apiFetch('/maintenances/'+m.id,{method:'DELETE'}); await loadSalesData(selComplex||resComplex); await loadCalendar(resComplex,calDate);},"Mantenimiento eliminado.")}>Eliminar</button></td></tr>)}</tbody></table></div>}
       </div>
@@ -764,7 +765,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
         <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">Calendario de disponibilidad y reservas (staff)</h2><span className="text-xs text-slate-500">Colores por escenario · marca/desmarca para ocultar/mostrar</span></div>
         {!resComplex ? <p className="text-sm text-slate-500">Selecciona un complejo para ver el calendario de todos sus escenarios.</p> : (
           calScenarios.length===0 ? <p className="text-sm text-slate-500">Este complejo no tiene escenarios.</p> :
-          <AvailabilityCalendar date={calDate} scenarios={calScenarios} blocksByScenario={calBlocks} visibleIds={visibleScenarios} onToggle={(id)=>setVisibleScenarios((v:any)=>({...v,[id]:!v[id]}))} weekView onPickSlotWeek={(sid:any,d:any,st:any,en:any)=>{ const cid=resComplex||selComplex||complexes[0]?.id||""; setResModalForm({complexId:cid,scenarioId:sid,date:d,start:st,end:en,clientName:"",clientEmail:"",clientPhone:"",people:1,note:"",showCalendar:false,newClient:false,hours:1,initialStatus:"PENDING_CONFIRMATION",membershipId:null}); const t2=complexes.find((c:any)=>c.id===cid)?.tenantId || tenants[0]?.id; if(t2){ apiFetch<any>(`/users/memberships?tenantId=${t2}&role=CLIENT`).then(r=>setClientOptions(r.data||[])).catch(()=>setClientOptions([])); } if(cid){ loadScenarios(cid); loadCalendar(cid,d); } setResModalOpen(true); }} onShowSlotReservations={(blocks:any[])=>{ setSlotResData(blocks); setSlotResModal(true); }} />
+          <AvailabilityCalendar date={calDate} scenarios={calScenarios} blocksByScenario={calBlocks} visibleIds={visibleScenarios} onToggle={(id)=>setVisibleScenarios((v:any)=>({...v,[id]:!v[id]}))} weekView onPickSlotWeek={(sid:any,d:any,st:any,en:any)=>{ const cid=resComplex||selComplex||complexes[0]?.id||""; setResModalForm({complexId:cid,scenarioId:sid,date:d,start:st,end:en,clientName:"",clientEmail:"",clientPhone:"",people:1,note:"",showCalendar:false,newClient:false,hours:1,initialStatus:"PENDING_CONFIRMATION",membershipId:null}); const t2=complexes.find((c:any)=>c.id===cid)?.tenantId || tenants[0]?.id; if(t2){ apiFetch<any>(`/users/memberships?tenantId=${t2}&role=CLIENT`).then(r=>setClientOptions(r.data||[])).catch(()=>setClientOptions([])); } if(cid){ loadScenarios(cid); loadCalendar(cid,d); } setResModalOpen(true); }} onShowSlotReservations={(blocks:any[])=>{ setSlotResData(blocks); setSlotResModal(true); }} allowCreate={canManageOps} />
         )}
         <p className="text-xs text-slate-500">Vista única para admin/vendedor del complejo: disponibilidad y reservas por escenario en el día seleccionado. Usa los checkboxes para ocultar escenarios (ej. desmarcar “cancha 1”).</p>
       </div>
@@ -845,14 +846,14 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
         <div className="flex gap-2"><button className="rounded-md bg-blue-600 text-white px-4 py-2">Guardar</button><button type="button" onClick={()=>setUEdit(null)} className="rounded-md border px-4 py-2">Cancelar</button></div></form>}
     </div>}
     {tab==="productos"&&<div className="space-y-4">
-      <div className="flex items-center justify-between"><h2 className="font-medium">Productos</h2><button onClick={()=>{ setPForm({name:"",categoryId:"",newCategory:"",newSupplier:"",supplierId:"",notes:"",imageKey:"",imageName:"",presentations:[{name:"Unidad",unitsPerPack:1,cost:0,price:0}]}); setPEdit(null); setProdModalOpen(true); }} className="rounded-md bg-brand text-white px-4 py-2 text-sm">➕ Nuevo producto</button></div>
+      <div className="flex items-center justify-between"><h2 className="font-medium">Productos</h2>{canManageInventoryProducts && <button onClick={()=>{ setPForm({name:"",categoryId:"",newCategory:"",newSupplier:"",supplierId:"",notes:"",imageKey:"",imageName:"",presentations:[{name:"Unidad",unitsPerPack:1,cost:0,price:0}]}); setPEdit(null); setProdModalOpen(true); }} className="rounded-md bg-brand text-white px-4 py-2 text-sm">➕ Nuevo producto</button>}</div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{products.map((p:any)=> (
         <div key={p.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
           <div className="flex items-center gap-2">{p.imageUrl?<img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded object-cover"/>:<div className="w-12 h-12 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xl">📦</div>}<div className="flex-1"><div className="font-medium">{p.name}</div><div className="text-xs text-slate-500">{p.category?.name||"Sin categoría"} · {p.presentations?.length||0} pres.</div></div></div>
           <div className="flex gap-1 justify-end">
-            <button onClick={()=>{ setPEdit(p); setPForm({name:p.name||"",categoryId:p.categoryId||"",newCategory:"",newSupplier:"",supplierId:p.supplierId||"",notes:p.notes||"",imageKey:p.imageKey||"",imageName:"",presentations:p.presentations?.length?p.presentations.map((pr:any)=>({id:pr.id,name:pr.name,unitsPerPack:pr.unitsPerPack,cost:Number(pr.cost||0),price:Number(pr.price||0)})):[{name:"Unidad",unitsPerPack:1,cost:0,price:0}]}); setProdModalOpen(true); }} className="px-2 py-1 rounded border text-sm" title="Editar">✏️</button>
+            {canManageInventoryProducts && <button onClick={()=>{ setPEdit(p); setPForm({name:p.name||"",categoryId:p.categoryId||"",newCategory:"",newSupplier:"",supplierId:p.supplierId||"",notes:p.notes||"",imageKey:p.imageKey||"",imageName:"",presentations:p.presentations?.length?p.presentations.map((pr:any)=>({id:pr.id,name:pr.name,unitsPerPack:pr.unitsPerPack,cost:Number(pr.cost||0),price:Number(pr.price||0)})):[{name:"Unidad",unitsPerPack:1,cost:0,price:0}]}); setProdModalOpen(true); }} className="px-2 py-1 rounded border text-sm" title="Editar">✏️</button>}
             <button onClick={()=>{ setStockForm({productId:p.id,presentationId:(p.presentations||[])[0]?.id||"",warehouseId:warehouses[0]?.id||"",qty:1,unitCost:Number((p.presentations||[])[0]?.cost||0)}); setStockModalOpen(true); }} className="px-2 py-1 rounded border text-sm" title="Aumentar stock">➕</button>
-            <button onClick={async()=>{ if(!confirm("¿Eliminar producto?")) return; try{ await apiFetch(`/inventory/products/${p.id}`,{method:"DELETE"}); await loadSalesData(resComplex||selComplex); }catch(e:any){ alert(e.message||"Error"); } }} className="px-2 py-1 rounded border text-sm text-red-600" title="Eliminar">🗑️</button>
+            {canManageInventoryProducts && <button onClick={async()=>{ if(!confirm("¿Eliminar producto?")) return; try{ await apiFetch(`/inventory/products/${p.id}`,{method:"DELETE"}); await loadSalesData(resComplex||selComplex); }catch(e:any){ alert(e.message||"Error"); } }} className="px-2 py-1 rounded border text-sm text-red-600" title="Eliminar">🗑️</button>}
           </div>
         </div>
       ))}</div>
@@ -861,7 +862,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
       <div className="flex flex-wrap gap-2 items-center text-sm"><span>Complejo:</span><select className="border rounded px-2 py-1.5 bg-transparent" value={resComplex||selComplex} onChange={e=>{setResComplex(e.target.value); setSelComplex(e.target.value); loadSalesData(e.target.value);}}><option value="">Selecciona</option>{complexes.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-2">
         <h2 className="font-medium">Almacenes y ubicaciones</h2>
-        <div className="flex flex-wrap gap-2"><button onClick={()=>setWhModalOpen(true)} className="rounded-md bg-brand text-white px-4 py-2 text-sm">➕ Crear almacén</button><button onClick={()=>setImportModalOpen(true)} className="rounded-md border px-4 py-2 text-sm">📥 Importar inventario</button><button onClick={()=>setBajaModalOpen(true)} className="rounded-md border border-red-300 text-red-700 px-4 py-2 text-sm">🗑️ Salida / baja</button></div>
+        {canManageInventoryProducts && <div className="flex flex-wrap gap-2"><button onClick={()=>setWhModalOpen(true)} className="rounded-md bg-brand text-white px-4 py-2 text-sm">➕ Crear almacén</button><button onClick={()=>setImportModalOpen(true)} className="rounded-md border px-4 py-2 text-sm">📥 Importar inventario</button><button onClick={()=>setBajaModalOpen(true)} className="rounded-md border border-red-300 text-red-700 px-4 py-2 text-sm">🗑️ Salida / baja</button></div>}
       </div>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="font-medium mb-2">Stock por presentación y ubicación</h2>
@@ -874,7 +875,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
         ))}</div>}
       </div>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-        <div className="flex items-center justify-between mb-2"><h2 className="font-medium">Movimientos recientes</h2><button onClick={()=>setMovModalOpen(true)} className="rounded-md border px-3 py-1.5 text-sm">🔄 Hacer movimiento</button></div>
+        <div className="flex items-center justify-between mb-2"><h2 className="font-medium">Movimientos recientes</h2>{canManageInventoryProducts && <button onClick={()=>setMovModalOpen(true)} className="rounded-md border px-3 py-1.5 text-sm">🔄 Hacer movimiento</button>}</div>
         {movements.length===0 ? <p className="text-sm text-slate-500">Sin movimientos.</p> : <div className="overflow-auto max-h-64"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="py-2 pr-2">Fecha</th><th className="py-2 pr-2">Tipo</th><th className="py-2 pr-2">Producto</th><th className="py-2 pr-2">Cant.</th><th className="py-2 pr-2">Usuario</th></tr></thead><tbody>{movements.slice(0,20).map((m:any)=> <tr key={m.id} className="border-b"><td className="py-2 pr-2 text-xs">{new Date(m.createdAt).toLocaleString()}</td><td className="py-2 pr-2">{m.type}</td><td className="py-2 pr-2 text-xs">{m.presentation?.product?.name||m.product?.name||"—"}</td><td className="py-2 pr-2">{m.qty}</td><td className="py-2 pr-2 text-xs">{m.user?.name||m.createdBy||"—"}</td></tr>)}</tbody></table></div>}
       </div>
     </div>}
@@ -909,7 +910,7 @@ function AdminPage({me, unreadCount}:{me:Me|null; unreadCount:number}){
           <span className="text-xs text-slate-500">Semana del {resModalForm.date||calDate}</span>
           <button onClick={()=>{const d=new Date(resModalForm.date||calDate); d.setDate(d.getDate()+7); setResModalForm({...resModalForm,date:d.toISOString().slice(0,10)}); loadCalendar(resModalForm.complexId||resComplex||selComplex, d.toISOString().slice(0,10));}} className="rounded border px-2 py-1">▶</button>
         </div>
-        <AvailabilityCalendar date={resModalForm.date||calDate} scenarios={calScenarios} blocksByScenario={calBlocks} visibleIds={visibleScenarios} onToggle={(id:any)=>setVisibleScenarios((v:any)=>({...v,[id]:!v[id]}))} onPickSlotWeek={(sid:any,d:any,st:any,en:any)=>{ setResModalForm((f:any)=>({...f,scenarioId:sid,date:d,start:st,end:en,showCalendar:false})); }} weekView />
+        <AvailabilityCalendar date={resModalForm.date||calDate} scenarios={calScenarios} blocksByScenario={calBlocks} visibleIds={visibleScenarios} onToggle={(id:any)=>setVisibleScenarios((v:any)=>({...v,[id]:!v[id]}))} onPickSlotWeek={(sid:any,d:any,st:any,en:any)=>{ setResModalForm((f:any)=>({...f,scenarioId:sid,date:d,start:st,end:en,showCalendar:false})); }} allowCreate={true} weekView />
       </>}
       {!resModalForm.showCalendar && <div className="text-xs text-slate-500">Seleccionado: {resModalForm.date} {resModalForm.start}-{resModalForm.end}</div>}
       <div className="grid sm:grid-cols-2 gap-2 text-sm">
