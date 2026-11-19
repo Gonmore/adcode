@@ -17,7 +17,7 @@ services:
       retries: 10
       start_period: 30s
     networks:
-      - red-produccion
+      - red-interna
 
   web-adcode:
     image: gonmore14/web-adcode:${APP_VERSION:-latest}
@@ -31,7 +31,7 @@ services:
     ports:
       - "4173:80"
     networks:
-      - red-produccion
+      - red-interna
 
   api-migrate:
     image: gonmore14/api-adcode:${APP_VERSION:-latest}
@@ -42,7 +42,7 @@ services:
       NODE_ENV: production
     command: ["npm", "run", "prisma:migrate:prod", "--workspace", "@adcode/api"]
     networks:
-      - red-produccion
+      - red-interna
     profiles:
       - tools
 
@@ -55,11 +55,11 @@ services:
       NODE_ENV: production
     command: ["npm", "run", "db:seed:prod", "--workspace", "@adcode/api"]
     networks:
-      - red-produccion
+      - red-interna
     profiles:
       - tools
 
 networks:
-  red-produccion:
+  red-interna:
     external: true
     name: ${DOCKER_EXTERNAL_NETWORK:-red-interna}
