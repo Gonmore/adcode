@@ -16,7 +16,7 @@
     "src"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b --force",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
