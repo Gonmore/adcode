@@ -367,7 +367,7 @@ function HomePage({ me, refreshMe, unreadCount, notifications, onReadAll }: { me
     <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-6 text-center">
       <div className="flex flex-col items-center gap-3 mb-4"><img src="/brand/logo.png" alt="AdCoDe" className="h-20 w-20 object-contain" /><h1 className="text-3xl font-bold">🏟️ AdCoDe</h1><p className="text-slate-600 dark:text-slate-300 max-w-md">Administración de complejos deportivos: reservas, escenarios, ventas, inventario y reportes. ⚽🏀🎾</p></div>
 
-      <div className="mt-4 flex flex-wrap gap-3 items-center">
+      <div className="mt-4 flex flex-wrap gap-3 items-center justify-center">
         <a href={authCfg?.googleAuthEnabled?"/api/v1/auth/google/start":undefined} onClick={e=>{if(!authCfg?.googleAuthEnabled)e.preventDefault();}} className={`inline-flex items-center gap-2 rounded-md border px-4 py-2 ${authCfg?.googleAuthEnabled?"":"opacity-50 cursor-not-allowed"}`} title={authCfg?.googleAuthEnabled?"Continuar con Google":"Google OAuth pendiente"}><img src="/brand/google-g.png" alt="Google" className="h-5 w-5"/> Continuar con Google 🔐</a>
         {me && <Link to="/admin" className="inline-flex items-center rounded-md border px-4 py-2">Ir al panel 📊</Link>}
       </div>
@@ -1116,7 +1116,7 @@ export default function App(){
   async function loadNotifications(){ try{ const r=await apiFetch<any>("/notifications"); setNotifications(r.data||[]); setUnreadCount(Number(r.unreadCount||0)); }catch{ setNotifications([]); setUnreadCount(0); } }
   async function readAll(){ try{ await apiFetch("/notifications/read",{method:"POST",body:JSON.stringify({all:true})}); }catch{} await loadNotifications(); }
   async function logout(){ try{await apiFetch("/auth/logout",{method:"POST"});}catch{} setMe(null); setNotifications([]); setUnreadCount(0); navigate("/"); }
-  useEffect(()=>{refreshMe();},[]);
+  useEffect(()=>{ const qs=new URLSearchParams(window.location.search); if(qs.get("google")==="ok"){ refreshMe().then(()=>{ window.history.replaceState({}, "", "/"); }); } else { refreshMe(); } },[]);
   useEffect(()=>{ if(me) loadNotifications(); else { setNotifications([]); setUnreadCount(0); } },[me?.id]);
   return (<Layout me={me} onLogout={logout} unread={unreadCount} refreshMe={refreshMe} hideHeader={location.pathname==="/" && !me} impersonate={impersonate} onBackToPlatform={()=>setImpersonate(null)}><Routes>
     <Route path="/" element={<HomePage me={me} refreshMe={refreshMe} unreadCount={unreadCount} notifications={notifications} onReadAll={readAll}/>}/>

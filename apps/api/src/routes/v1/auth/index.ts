@@ -1,4 +1,5 @@
 ﻿import type { FastifyInstance } from "fastify";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { env, googleAuthEnabled } from "../../../lib/env.js";
 import { prisma } from "../../../lib/prisma.js";
@@ -109,14 +110,62 @@ export default async function authRoutes(app: FastifyInstance) {
     return { user: shapeUser(full) };
   });
 
-  app.get("/google/start", async (_req, reply) => {
+  app.get("/google/start", async (req, reply) => {
     if (!googleAuthEnabled) return reply.code(501).send({ error: "GOOGLE_AUTH_NOT_CONFIGURED", message: "Configura GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y GOOGLE_REDIRECT_URI" });
-    return reply.code(501).send({ error: "NOT_IMPLEMENTED", message: "Flujo OAuth Google pendiente de implementación completa" });
+    const state = crypto.randomUUID();
+    reply.setCookie("oauth_state", state, { path: "/", httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", maxAge: 600 });
+    const params = new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID!,
+      redirect_uri: env.GOOGLE_REDIRECT_URI!,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      access_type: "offline",
+      prompt: "select_account",
+    });
+    return reply.redirect("https://accounts.google.com/o/oauth2/v2/auth?" + params.toString());
   });
 
-  app.get("/google/callback", async (_req, reply) => {
+  app.get("/google/callback", async (req, reply) => {
     if (!googleAuthEnabled) return reply.code(501).send({ error: "GOOGLE_AUTH_NOT_CONFIGURED", message: "Google OAuth no configurado" });
-    return reply.code(501).send({ error: "NOT_IMPLEMENTED", message: "Callback OAuth Google pendiente" });
+    const { code, state } = (req.query || {}) as { code?: string; state?: string };
+    const cookieState = (req.cookies as any)?.oauth_state;
+    if (!code || !state || !cookieState || state !== cookieState) {
+      return reply.code(400).send({ error: "INVALID_STATE", message: "Estado OAuth inválido" });
+    }
+    reply.clearCookie("oauth_state", { path: "/" });
+    try {
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: env.GOOGLE_CLIENT_ID!,
+          client_secret: env.GOOGLE_CLIENT_SECRET!,
+          redirect_uri: env.GOOGLE_REDIRECT_URI!,
+          grant_type: "authorization_code",
+        }).toString(),
+      });
+      const tokens: any = await tokenRes.json();
+      if (!tokens.id_token) return reply.code(400).send({ error: "TOKEN_ERROR", message: "No se obtuvo id_token" });
+      // decode id_token (base64url payload)
+      const payload = JSON.parse(Buffer.from(tokens.id_token.split(".")[1], "base64url").toString("utf8"));
+      if (!payload.email || !payload.email_verified) return reply.code(400).send({ error: "EMAIL_NOT_VERIFIED", message: "Email no verificado" });
+      const email = String(payload.email).toLowerCase();
+      const googleSub = String(payload.sub);
+      let user = await prisma.user.findFirst({ where: { OR: [{ googleSub }, { email }] } });
+      if (!user) {
+        user = await prisma.user.create({ data: { email, name: payload.name || email, isActive: true, googleSub, avatarUrl: payload.picture || null } });
+      } else {
+        await prisma.user.update({ where: { id: user.id }, data: { googleSub, name: user.name || payload.name || email, avatarUrl: user.avatarUrl || payload.picture || null, isActive: true } });
+      }
+      await issueSession(reply, user.id, user.email, req);
+      const full = await loadUserWithMemberships(user.id);
+      const frontendUrl = (env.APP_URL || "http://localhost:4173").replace(/\/$/, "");
+      return reply.redirect(frontendUrl + "/?google=ok");
+    } catch (e: any) {
+      return reply.code(500).send({ error: "OAUTH_ERROR", message: e?.message || "Error en OAuth Google" });
+    }
   });
 
   app.get("/me", async (req) => {
