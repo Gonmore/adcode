@@ -40,6 +40,8 @@ services:
       - .env
     environment:
       NODE_ENV: production
+    volumes:
+      - ./apps/api/prisma:/app/apps/api/prisma
     command: ["npm", "run", "prisma:migrate:prod", "--workspace", "@adcode/api"]
     networks:
       - red-interna
