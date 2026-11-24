@@ -84,12 +84,13 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!auth) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Sesión no iniciada" });
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) return reply.code(404).send({ error: "NOT_FOUND", message: "Usuario no encontrado" });
+    if (user.googleSub) {
+      return reply.code(403).send({ error: "OAUTH_ACCOUNT", message: "Esta cuenta usa inicio de sesión con Google. El cambio de contraseña no está disponible." });
+    }
     if (user.passwordHash) {
       if (!body.data.currentPassword) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Contraseña actual requerida" });
       const ok = await verifyPassword(body.data.currentPassword, user.passwordHash);
       if (!ok) return reply.code(401).send({ error: "INVALID_CREDENTIALS", message: "Contraseña actual incorrecta" });
-    } else if (user.googleSub) {
-      // Social-only account: allow setting a password explicitly if desired? keep simple: require not necessary but permit set
     }
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.data.newPassword) } });
     return { ok: true };
@@ -174,6 +175,52 @@ export default async function authRoutes(app: FastifyInstance) {
     const full = await loadUserWithMemberships(auth.id);
     if (!full || !full.isActive) return { user: null };
     return { user: shapeUser(full) };
+  });
+
+  // Onboarding: estado de configuración inicial del tenant del usuario (complejo, escenario, almacén, producto, stock)
+  app.get("/onboarding", async (req, reply) => {
+    const auth = req.authUser || (await getAuthUserFromRequest(req));
+    if (!auth) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Autenticación requerida" });
+    const q = (req.query || {}) as { tenantId?: string };
+    let tenantId = q.tenantId || "";
+    const adminMembership = auth.memberships.find((m) => m.role === "TENANT_ADMIN");
+    if (!tenantId && adminMembership) tenantId = adminMembership.tenantId;
+    if (!tenantId) {
+      return reply.code(400).send({ error: "VALIDATION_ERROR", message: "tenantId requerido" });
+    }
+    const membership = auth.memberships.find((m) => m.tenantId === tenantId);
+    if (!membership && !isPlatformAdmin(auth)) {
+      return reply.code(403).send({ error: "FORBIDDEN", message: "Sin permisos sobre este tenant" });
+    }
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true, slug: true, status: true, maxComplexes: true } });
+    if (!tenant) return reply.code(404).send({ error: "NOT_FOUND", message: "Tenant no encontrado" });
+
+    const complexes = await prisma.complex.findMany({ where: { tenantId }, select: { id: true, name: true, slug: true } });
+    const complexIds = complexes.map((c) => c.id);
+    const scenarios = complexIds.length ? await prisma.scenario.findMany({ where: { complexId: { in: complexIds } }, select: { id: true, complexId: true, name: true } }) : [];
+    const warehouses = complexIds.length ? await prisma.warehouse.findMany({ where: { complexId: { in: complexIds } }, include: { locations: true } }) : [];
+    const products = complexIds.length ? await prisma.product.findMany({ where: { complexId: { in: complexIds } }, select: { id: true, name: true, complexId: true } }) : [];
+    const stockLots = complexIds.length ? await prisma.stockLot.findMany({ where: { warehouse: { complexId: { in: complexIds } }, qty: { gt: 0 } }, select: { id: true, qty: true } }) : [];
+    const totalStock = stockLots.reduce((s, l) => s + Number(l.qty || 0), 0);
+
+    const items = {
+      complex: { ok: complexes.length > 0, count: complexes.length, max: tenant.maxComplexes, hint: "Crea al menos 1 complejo (cancha/instalación)" },
+      scenario: { ok: scenarios.length > 0, count: scenarios.length, hint: "Crea al menos 1 escenario para alquilar" },
+      warehouse: { ok: warehouses.length > 0, count: warehouses.length, hint: "Crea al menos 1 almacén" },
+      location: { ok: warehouses.some((w) => (w as any).locations && (w as any).locations.length > 0) || false, count: 0, hint: "Agrega ubicaciones al almacén" },
+      product: { ok: products.length > 0, count: products.length, hint: "Crea al menos 1 producto con su presentación" },
+      stock: { ok: totalStock > 0, count: totalStock, hint: "Registra stock de los productos" },
+    };
+
+    return {
+      data: {
+        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, status: tenant.status },
+        complexes,
+        completed: Object.fromEntries(Object.entries(items).map(([k, v]) => [k, v.ok])),
+        items,
+        nextStep: !items.complex.ok ? "complex" : !items.scenario.ok ? "scenario" : !items.warehouse.ok ? "warehouse" : !items.product.ok ? "product" : !items.stock.ok ? "stock" : "done",
+      },
+    };
   });
 
   app.post("/refresh", async (req, reply) => {

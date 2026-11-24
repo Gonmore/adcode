@@ -125,3 +125,15 @@ Pendiente (fases siguientes): implementación completa de auth Google, RBAC/mód
 ## Actualización 2026-11-18
 - Nuevos endpoints: DELETE /inventory/products/:id; POST /platform/tenants/:id/reset-admin-password; PATCH /auth/me; POST /auth/change-password (currentPassword opcional para cuentas sin password); mantenimientos con tipos MONTHLY/QUARTERLY/SEMIANNUAL/ANNUAL y repeatCount; availability incluye clientName/people/note/membership en blocks.
 - UI: gran vistas por rol con sub-pestañas, modales de venta/inventario/mantenimiento/reserva/historial.
+
+## Actualización 2026-11-24
+- **Onboarding automático para nuevos tenants:** Modal paso a paso (complejo → escenario → almacén → producto → stock) que se lanza automáticamente post-login para `TENANT_ADMIN` sin complejos. Al finalizar redirige a reservas.
+- **Aislamiento de datos por tenant:** Productos, categorías y proveedores ahora se filtran estrictamente por `complexId` (eliminado `complexId: null` global). Cada tenant solo ve sus propios datos.
+- **Usuarios OAuth:** No pueden cambiar contraseña (oculto en UI y bloqueado en backend con error 403 `OAUTH_ACCOUNT`).
+- **Formularios de edición mejorados:** Complejos y escenarios ahora tienen las mismas opciones al editar que al crear (weeklySchedule, precios, formato de alquiler, etc.).
+- **Escenarios - Horarios del complejo:** Checkbox "Usar horarios del complejo" (marcado por defecto) en crear/editar escenarios. Si se desmarca, se muestran campos de horario personalizados.
+- **Calendario de reservas:** Ahora muestra correctamente horarios del complejo y escenario (incluyendo weeklySchedule y horarios de fin de semana).
+- **Inputs numéricos móviles:** Nuevo componente `NumberInput` con botones `− # +` optimizado para touch en móvil, reemplazando todos los `input type="number"`.
+- **Feedback en formularios:** Todos los modales muestran mensaje de éxito y cierran correctamente (escenario, almacén, producto, stock).
+- **Listado de almacenes:** Vista de inventario ahora muestra almacenes y ubicaciones existentes.
+- **Seed actualizado:** Escenarios con `availableDays` y productos con `complexId` (ya no globales).

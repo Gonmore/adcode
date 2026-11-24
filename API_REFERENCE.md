@@ -38,3 +38,9 @@
 ## Actualización 2026-11-18
 - Nuevos endpoints: DELETE /inventory/products/:id; POST /platform/tenants/:id/reset-admin-password; PATCH /auth/me; POST /auth/change-password (currentPassword opcional para cuentas sin password); mantenimientos con tipos MONTHLY/QUARTERLY/SEMIANNUAL/ANNUAL y repeatCount; availability incluye clientName/people/note/membership en blocks.
 - UI: gran vistas por rol con sub-pestañas, modales de venta/inventario/mantenimiento/reserva/historial.
+
+## Actualización 2026-11-24
+- **Nuevo endpoint:** `GET /auth/onboarding` - estado de configuración inicial del tenant (complejo, escenario, almacén, producto, stock). Devuelve `nextStep` para onboarding paso a paso.
+- **Aislamiento de datos:** `GET /inventory/products`, `/inventory/categories`, `/inventory/suppliers` ahora filtran estrictamente por `complexId` (sin productos globales).
+- **Usuarios OAuth:** `POST /auth/change-password` retorna 403 `OAUTH_ACCOUNT` si el usuario tiene `googleSub`.
+- **Escenarios:** `POST /scenarios` y `PATCH /scenarios/:id` ahora aceptan `rentalFormat` y `pricing` en el body. `openTime`/`closeTime` pueden ser `null` para usar horario del complejo.

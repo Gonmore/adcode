@@ -119,13 +119,52 @@ export default async function scenariosRoutes(app: FastifyInstance) {
   app.patch("/:id", async (req, reply) => {
     await requireAuth(req, reply); if (reply.sent) return;
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().min(2).optional(), rentalFormat: z.enum(["PER_HOUR","PER_PERSON","MIXED","FLAT_BLOCK"]).optional(), exclusive: z.boolean().optional(), capacity: z.number().int().positive().nullable().optional(), openTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(), closeTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(), availableDays: z.array(z.number().int().min(0).max(6)).optional(), isActive: z.boolean().optional() }).safeParse(req.body);
+    const body = z.object({
+      name: z.string().min(2).optional(),
+      rentalFormat: z.enum(["PER_HOUR","PER_PERSON","MIXED","FLAT_BLOCK"]).optional(),
+      exclusive: z.boolean().optional(),
+      capacity: z.number().int().positive().nullable().optional(),
+      openTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+      closeTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+      availableDays: z.array(z.number().int().min(0).max(6)).optional(),
+      isActive: z.boolean().optional(),
+      pricing: z.array(z.object({
+        period: z.enum(["DAY", "NIGHT"]),
+        pricePerHour: z.number().optional(),
+        pricePerPerson: z.number().optional(),
+        childPrice: z.number().optional(),
+        childAgeThreshold: z.number().int().min(1).max(18).optional(),
+        basePrice: z.number().optional(),
+        blockType: z.string().optional(),
+      })).optional(),
+    }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Datos inválidos" });
     const existing = await prisma.scenario.findUnique({ where: { id }, include: { complex: true } });
     if (!existing) return reply.code(404).send({ error: "NOT_FOUND", message: "Escenario no encontrado" });
     if (!isPlatformAdmin(req.authUser) && !isTenantAdmin(req.authUser, existing.complex.tenantId)) return reply.code(403).send({ error: "FORBIDDEN", message: "Solo el admin del tenant puede editar escenarios" });
     if (!(await assertTenantActive(existing.complex.tenantId, reply))) return;
-    const updated = await prisma.scenario.update({ where: { id }, data: body.data as any, include: { pricingRules: true } });
+    const { pricing, ...scenarioData } = body.data;
+    const updated = await prisma.scenario.update({
+      where: { id },
+      data: {
+        ...scenarioData,
+        ...(pricing?.length ? {
+          pricingRules: {
+            deleteMany: {},
+            create: pricing.map(p => ({
+              period: p.period,
+              pricePerHour: p.pricePerHour as any,
+              pricePerPerson: p.pricePerPerson as any,
+              childPrice: p.childPrice as any,
+              childAgeThreshold: p.childAgeThreshold as any,
+              basePrice: p.basePrice as any,
+              blockType: p.blockType || null,
+            })),
+          },
+        } : {}),
+      },
+      include: { pricingRules: true },
+    });
     return { data: updated };
   });
 

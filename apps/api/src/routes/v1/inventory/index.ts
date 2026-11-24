@@ -93,7 +93,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     if (!complexId) return { data: [] };
     const cx = await ensureComplexAccess(req, reply, complexId, true); if (!cx) return;
     if (!(await assertTenantActive(cx.tenantId, reply))) return;
-    const data = await prisma.productCategory.findMany({ where: { OR: [{ complexId }, { complexId: null }] }, orderBy: { name: "asc" } });
+    const data = await prisma.productCategory.findMany({ where: { complexId }, orderBy: { name: "asc" } });
     return { data };
   });
   app.post("/categories", async (req, reply) => {
@@ -111,7 +111,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     if (!complexId) return { data: [] };
     const cx = await ensureComplexAccess(req, reply, complexId, true); if (!cx) return;
     if (!(await assertTenantActive(cx.tenantId, reply))) return;
-    const data = await prisma.supplier.findMany({ where: { OR: [{ complexId }, { complexId: null }] }, orderBy: { name: "asc" } });
+    const data = await prisma.supplier.findMany({ where: { complexId }, orderBy: { name: "asc" } });
     return { data };
   });
   app.post("/suppliers", async (req, reply) => {
@@ -131,7 +131,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     const cx = await ensureComplexAccess(req, reply, complexId, true); if (!cx) return;
     if (!(await assertTenantActive(cx.tenantId, reply))) return;
     const data = await prisma.product.findMany({
-      where: { OR: [{ complexId }, { complexId: null }] },
+      where: { complexId },
       include: {
         category: true, supplier: true,
         presentations: { orderBy: { name: "asc" } },
@@ -346,8 +346,8 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     const iPrice = idx(["precio unitario", "precio", "price", "unit price"]);
     if (iName < 0) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "No se encontró columna Nombre" });
 
-    const cats = await prisma.productCategory.findMany({ where: { OR: [{ complexId: body.data.complexId }, { complexId: null }] } });
-    const prods = await prisma.product.findMany({ where: { OR: [{ complexId: body.data.complexId }, { complexId: null }] }, include: { presentations: true } });
+    const cats = await prisma.productCategory.findMany({ where: { complexId: body.data.complexId } });
+    const prods = await prisma.product.findMany({ where: { complexId: body.data.complexId }, include: { presentations: true } });
 
     let created = 0, updated = 0, stockAdded = 0, skipped = 0;
     const errors: string[] = [];

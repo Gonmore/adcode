@@ -93,3 +93,26 @@ Registro de cambios, decisiones y pendientes del proyecto.
 - Envío de correo/link de activación y cambio obligatorio de contraseña en primer uso.
 - Carga de foto por S3 presign en el modal de perfil/producto (hoy URL + upload local).
 - Pruebas automatizadas y validación SMTP/Google OAuth/S3 en producción.
+
+## 2026-11-24 - Onboarding, aislamiento multi-tenant, mejoras UX móvil
+
+### Cambios principales
+- **Onboarding automático**: Modal paso a paso (complejo → escenario → almacén → producto → stock) que se lanza post-login para `TENANT_ADMIN` sin complejos. Al finalizar redirige a reservas. Componente `OnboardingModal.tsx`.
+- **Aislamiento de datos por tenant**: Corregido fetch de productos/categorías/proveedores para filtrar estrictamente por `complexId` (eliminado `complexId: null` que exponía datos globales del seed a todos los tenants).
+- **Usuarios OAuth**: Bloqueado cambio de contraseña para cuentas con `googleSub` (403 `OAUTH_ACCOUNT` en backend, oculto en UI).
+- **Formularios de edición**: Complejos y escenarios ahora tienen las mismas opciones al editar que al crear (weeklySchedule, precios, formato, etc.). Backend `PATCH /scenarios/:id` acepta `rentalFormat` y `pricing`.
+- **Escenarios - Horarios**: Checkbox "Usar horarios del complejo" (default marcado) en crear/editar. Al desmarcar, muestra campos de horario personalizados.
+- **Calendario**: Muestra correctamente horarios del complejo/escenario (incluye weeklySchedule y findes).
+- **Inputs numéricos móviles**: Componente `NumberInput.tsx` con botones `− # +` (touch-friendly), reemplazó 23 inputs numéricos.
+- **Feedback en modales**: Mensajes de éxito y cierre automático en escenario, almacén, producto, stock.
+- **Listado almacenes**: Vista inventario muestra almacenes y ubicaciones.
+- **Seed**: Escenarios con `availableDays`, productos con `complexId` (no globales).
+
+### Archivos modificados
+- `apps/api/prisma/seed-demo.sql`
+- `apps/api/src/routes/v1/auth/index.ts` (endpoint onboarding, bloqueo OAuth)
+- `apps/api/src/routes/v1/inventory/index.ts` (aislamiento tenant)
+- `apps/api/src/routes/v1/scenarios/index.ts` (PATCH con pricing/rentalFormat)
+- `apps/web/src/app/App.tsx` (onboarding, NumberInput, horarios, feedback)
+- `apps/web/src/app/OnboardingModal.tsx` (nuevo)
+- `apps/web/src/app/NumberInput.tsx` (nuevo)

@@ -31,9 +31,9 @@ INSERT INTO "ScenarioGroup"(id,"complexId",name,kind,"createdAt") VALUES
 ('sg_demo_canchas','cpx_demo_central','Canchas','CANCHA',now())
 ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name;
 
-INSERT INTO "Scenario"(id,"complexId","groupId",name,"rentalFormat",exclusive,capacity,"minDuration","stepMinutes","isActive",photos,"createdAt","updatedAt") VALUES
-('scn_demo_fut1','cpx_demo_central','sg_demo_canchas','Cancha Fútbol 1','PER_HOUR',true,12,60,30,true,ARRAY[]::text[],now(),now())
-ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name;
+INSERT INTO "Scenario"(id,"complexId","groupId",name,"rentalFormat",exclusive,capacity,"minDuration","stepMinutes","isActive",photos,"availableDays","createdAt","updatedAt") VALUES
+('scn_demo_fut1','cpx_demo_central','sg_demo_canchas','Cancha Fútbol 1','PER_HOUR',true,12,60,30,true,ARRAY[]::text[],ARRAY[0,1,2,3,4,5,6]::int[],now(),now())
+ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, "availableDays"=EXCLUDED."availableDays";
 
 INSERT INTO "PricingRule"(id,"scenarioId",period,"pricePerHour") VALUES
 ('pr_demo_day','scn_demo_fut1','DAY',80),
@@ -43,8 +43,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "Warehouse"(id,"complexId",name,"createdAt") VALUES ('wh_demo','cpx_demo_central','Almacén Principal',now()) ON CONFLICT DO NOTHING;
 INSERT INTO "WarehouseLocation"(id,"warehouseId",name) VALUES ('wloc_demo_1','wh_demo','Mostrador'),('wloc_demo_2','wh_demo','Depósito') ON CONFLICT DO NOTHING;
 INSERT INTO "Kiosk"(id,"complexId","warehouseId",name,"isActive","createdAt") VALUES ('kiosk_demo','cpx_demo_central','wh_demo','Kiosco Principal',true,now()) ON CONFLICT DO NOTHING;
-INSERT INTO "ProductCategory"(id,name) VALUES ('cat_bebidas','Bebidas') ON CONFLICT DO NOTHING;
-INSERT INTO "Product"(id,"categoryId",name,cost,price,active,"createdAt","updatedAt") VALUES ('prod_agua','cat_bebidas','Agua 500ml',3,6,true,now(),now()) ON CONFLICT DO NOTHING;
+INSERT INTO "ProductCategory"(id,"complexId",name) VALUES ('cat_bebidas','cpx_demo_central','Bebidas') ON CONFLICT DO NOTHING;
+INSERT INTO "Product"(id,"complexId","categoryId",name,cost,price,active,"createdAt","updatedAt") VALUES ('prod_agua','cpx_demo_central','cat_bebidas','Agua 500ml',3,6,true,now(),now()) ON CONFLICT DO NOTHING;
 INSERT INTO "StockLot"(id,"productId","warehouseId","locationId",qty,"unitCost","createdAt") VALUES ('lot_agua','prod_agua','wh_demo','wloc_demo_1',100,3,now()) ON CONFLICT DO NOTHING;
 
 INSERT INTO "Membership"(id,"userId","tenantId",role,"complexIds","clientTier","createdAt","updatedAt")
