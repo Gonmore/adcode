@@ -101,7 +101,7 @@ Registro de cambios, decisiones y pendientes del proyecto.
 - **Aislamiento de datos por tenant**: Corregido fetch de productos/categorías/proveedores para filtrar estrictamente por `complexId` (eliminado `complexId: null` que exponía datos globales del seed a todos los tenants).
 - **Usuarios OAuth**: Bloqueado cambio de contraseña para cuentas con `googleSub` (403 `OAUTH_ACCOUNT` en backend, oculto en UI).
 - **Formularios de edición**: Complejos y escenarios ahora tienen las mismas opciones al editar que al crear (weeklySchedule, precios, formato, etc.). Backend `PATCH /scenarios/:id` acepta `rentalFormat` y `pricing`.
-- **Escenarios - Horarios**: Checkbox "Usar horarios del complejo" (default marcado) en crear/editar. Al desmarcar, muestra campos de horario personalizados.
+- **Escenarios - Horarios**: Checkbox "Usar horarios del complejo" (default marcado) en crear/editar. Al desmarca, muestra campos de horario personalizados.
 - **Calendario**: Muestra correctamente horarios del complejo/escenario (incluye weeklySchedule y findes).
 - **Inputs numéricos móviles**: Componente `NumberInput.tsx` con botones `− # +` (touch-friendly), reemplazó 23 inputs numéricos.
 - **Feedback en modales**: Mensajes de éxito y cierre automático en escenario, almacén, producto, stock.
@@ -116,3 +116,22 @@ Registro de cambios, decisiones y pendientes del proyecto.
 - `apps/web/src/app/App.tsx` (onboarding, NumberInput, horarios, feedback)
 - `apps/web/src/app/OnboardingModal.tsx` (nuevo)
 - `apps/web/src/app/NumberInput.tsx` (nuevo)
+
+## 2026-11-25 - Mejoras UI/UX, platform admin, calendario timezone
+
+### Cambios principales
+- **Login móvil**: Eliminado texto decorativo sobre botón Google, padding lateral/vertical correcto, inputs touch-friendly, credenciales demo removidas.
+- **Home grid**: Tarjetas con gradiente azul (claro→oscuro), bordes 3px, relleno 60% opacidad, micro-interacciones, texto oscuro en tema claro.
+- **Platform admin**: Ya no auto-selecciona tenant. Selector de Tenant en complejos/escenarios/reservas. Complejos filtrados por tenant.
+- **Reservas**: Selector Tenant + Complejo. Calendario muestra escenarios del complejo.
+- **Calendario timezone**: Backend calcula bloques CLOSED en timezone del complejo (`tzOffset`), no UTC.
+- **Edición en modales**: Complejos y escenarios se editan en modal. Labels en todos los inputs.
+- **Escenarios - Horario por día**: weeklySchedule al desmarcar checkbox. Eliminados "Disponible desde/hasta" y "Días disponibles".
+- **Precios**: Divisa tras monto, emojis ☀️/💡, step 10, default 100/200.
+- **Mantenimiento**: Tabla + modal con labels.
+- **Complejo**: Labels, eliminado checkbox pago posterior.
+
+### Archivos modificados
+- `apps/api/src/routes/v1/scenarios/index.ts` (tzOffset, weeklySchedule)
+- `apps/web/src/app/App.tsx` (platform admin, modales, labels, precios, mantenimiento)
+- `apps/web/src/app/NumberInput.tsx` (center prop)

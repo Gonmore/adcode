@@ -3,6 +3,17 @@ import { z } from "zod";
 import { prisma } from "../../../lib/prisma.js";
 import { requireAuth, isPlatformAdmin, isTenantAdmin, assertTenantActive } from "../../../lib/auth.js";
 
+function tzOffset(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date());
+    const offset = parts.find(p => p.type === "timeZoneName")?.value || "GMT-4";
+    const match = offset.match(/GMT([+-]\d+)/);
+    if (!match) return "-04:00";
+    const hours = parseInt(match[1]);
+    return hours >= 0 ? `+${String(hours).padStart(2,"0")}:00` : `-${String(Math.abs(hours)).padStart(2,"0")}:00`;
+  } catch { return "-04:00"; }
+}
+
 export default async function scenariosRoutes(app: FastifyInstance) {
   app.get("/", async (req) => {
     const { complexId, slug } = (req.query || {}) as { complexId?: string; slug?: string };
@@ -47,40 +58,47 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     };
     const closedBlocks: any[] = [];
     const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
-    const daySchedule = (d: Date) => weeklySchedule ? (weeklySchedule[String(d.getDay())] || null) : null;
-    const openStr = (d: Date) => {
+    const daySchedule = (dow: number) => weeklySchedule ? (weeklySchedule[String(dow)] || null) : null;
+    const openStr = (dow: number) => {
       if ((scenario as any).openTime) return (scenario as any).openTime;
-      const ds = daySchedule(d);
+      const ds = daySchedule(dow);
       if (ds) { if (ds.closed) return null; return ds.open || schedule.complexOpenTime; }
-      if (isWeekend(d) && schedule.complexWeekendOpenTime) return schedule.complexWeekendOpenTime;
+      if ((dow === 0 || dow === 6) && schedule.complexWeekendOpenTime) return schedule.complexWeekendOpenTime;
       return schedule.complexOpenTime;
     };
-    const closeStr = (d: Date) => {
+    const closeStr = (dow: number) => {
       if ((scenario as any).closeTime) return (scenario as any).closeTime;
-      const ds = daySchedule(d);
+      const ds = daySchedule(dow);
       if (ds) { if (ds.closed) return null; return ds.close || schedule.complexCloseTime; }
-      if (isWeekend(d) && schedule.complexWeekendCloseTime) return schedule.complexWeekendCloseTime;
+      if ((dow === 0 || dow === 6) && schedule.complexWeekendCloseTime) return schedule.complexWeekendCloseTime;
       return schedule.complexCloseTime;
     };
     const dayMs = 24*60*60*1000;
+    const tz = (scenario.complex as any).timezone || "America/La_Paz";
     let cur = new Date(from); cur.setHours(0,0,0,0);
     const endDay = new Date(to); endDay.setHours(0,0,0,0);
     for (let d = new Date(cur); d <= endDay; d = new Date(d.getTime() + dayMs)) {
       const dayStart = new Date(d); const dayEnd = new Date(d); dayEnd.setHours(23,59,59,999);
-      if (!schedule.availableDays.includes(dayStart.getDay())) {
+      // Get day of week in complex timezone
+      const dayOfWeek = new Date(d.toLocaleString("en-US", { timeZone: tz, weekday: "short" }));
+      const dowMap: Record<string, number> = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+      const dayDow = dowMap[dayOfWeek.toLocaleString("en-US", { timeZone: tz, weekday: "short" })] ?? d.getDay();
+      if (!schedule.availableDays.includes(dayDow)) {
         const s = dayStart < from ? from : dayStart; const e = dayEnd > to ? to : dayEnd;
         if (s < e) closedBlocks.push({ type: "CLOSED", startAt: s.toISOString(), endAt: e.toISOString(), reason: "Día no disponible" });
         continue;
       }
-      const os = openStr(d); const cs = closeStr(d);
+      const os = openStr(dayDow); const cs = closeStr(dayDow);
       if (os === null || cs === null) {
         const s = dayStart < from ? from : dayStart; const e = dayEnd > to ? to : dayEnd;
         if (s < e) closedBlocks.push({ type: "CLOSED", startAt: s.toISOString(), endAt: e.toISOString(), reason: "Complejo cerrado este día" });
         continue;
       }
       const [oh,om] = os.split(":").map(Number); const [ch,cm] = cs.split(":").map(Number);
-      const openAt = new Date(d); openAt.setHours(oh||0, om||0, 0, 0);
-      const closeAt = new Date(d); closeAt.setHours(ch||22, cm||0, 0, 0);
+      // Create open/close times in the complex timezone, then convert to UTC
+      const dateStr = d.toISOString().slice(0,10);
+      const openAt = new Date(`${dateStr}T${String(oh).padStart(2,"0")}:${String(om).padStart(2,"0")}:00${tzOffset(tz)}`);
+      const closeAt = new Date(`${dateStr}T${String(ch).padStart(2,"0")}:${String(cm).padStart(2,"0")}:00${tzOffset(tz)}`);
       if (openAt > closeAt) continue;
       const beforeS = dayStart < from ? from : dayStart; const beforeE = openAt > to ? to : openAt;
       if (beforeS < beforeE) closedBlocks.push({ type: "CLOSED", startAt: beforeS.toISOString(), endAt: beforeE.toISOString(), reason: "Fuera de horario" });
@@ -100,6 +118,7 @@ export default async function scenariosRoutes(app: FastifyInstance) {
       openTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
       closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
       availableDays: z.array(z.number().int().min(0).max(6)).optional(),
+      weeklySchedule: z.any().optional().nullable(),
       pricing: z.array(z.object({ period: z.enum(["DAY", "NIGHT"]), pricePerHour: z.number().optional(), pricePerPerson: z.number().optional(), childPrice: z.number().optional(), childAgeThreshold: z.number().int().min(1).max(18).optional(), basePrice: z.number().optional(), blockType: z.string().optional() })).optional(),
     }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: body.error.issues[0]?.message || "Datos inválidos" });
@@ -128,6 +147,7 @@ export default async function scenariosRoutes(app: FastifyInstance) {
       closeTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
       availableDays: z.array(z.number().int().min(0).max(6)).optional(),
       isActive: z.boolean().optional(),
+      weeklySchedule: z.any().optional().nullable(),
       pricing: z.array(z.object({
         period: z.enum(["DAY", "NIGHT"]),
         pricePerHour: z.number().optional(),

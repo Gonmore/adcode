@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function NumberInput({ value, onChange, min, max, step, placeholder, className, disabled }: {
+export default function NumberInput({ value, onChange, min, max, step, placeholder, className, disabled, center }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
@@ -9,6 +9,7 @@ export default function NumberInput({ value, onChange, min, max, step, placehold
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  center?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(String(value ?? 0));
@@ -37,7 +38,7 @@ export default function NumberInput({ value, onChange, min, max, step, placehold
   }
 
   return (
-    <div className={`inline-flex items-center border rounded overflow-hidden bg-transparent ${className || ""} ${disabled ? "opacity-50" : ""}`}>
+    <div className={`inline-flex items-center border rounded overflow-hidden bg-transparent ${center ? "justify-center" : ""} ${className || ""} ${disabled ? "opacity-50" : ""}`}>
       <button type="button" disabled={disabled} onClick={dec} className="w-8 h-8 flex items-center justify-center text-lg font-bold hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-slate-200 dark:active:bg-slate-600">−</button>
       {editing ? (
         <input

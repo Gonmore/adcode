@@ -43,4 +43,9 @@
 - **Nuevo endpoint:** `GET /auth/onboarding` - estado de configuración inicial del tenant (complejo, escenario, almacén, producto, stock). Devuelve `nextStep` para onboarding paso a paso.
 - **Aislamiento de datos:** `GET /inventory/products`, `/inventory/categories`, `/inventory/suppliers` ahora filtran estrictamente por `complexId` (sin productos globales).
 - **Usuarios OAuth:** `POST /auth/change-password` retorna 403 `OAUTH_ACCOUNT` si el usuario tiene `googleSub`.
-- **Escenarios:** `POST /scenarios` y `PATCH /scenarios/:id` ahora aceptan `rentalFormat` y `pricing` en el body. `openTime`/`closeTime` pueden ser `null` para usar horario del complejo.
+- **Escenarios:** `POST /scenarios` y `PATCH /scenarios/:id` ahora aceptan `rentalFormat` y `pricing` en el body. `openTime`/`closeTime` pueden ser `null` para usar horario del complejo. `weeklySchedule` acepta horario por día.
+
+## Actualización 2026-11-25
+- **Calendario timezone:** `GET /scenarios/:id/availability` ahora calcula bloques CLOSED en timezone del complejo (no UTC). `tzOffset()` convierte horarios locales a UTC correctamente.
+- **Platform admin:** No auto-selecciona tenant. UI requiere selección explícita de Tenant en complejos/escenarios/reservas.
+- **Complejos:** `allowClientPayLater` ya no se edita desde complejo (es por cliente).

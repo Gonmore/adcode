@@ -137,3 +137,15 @@ Pendiente (fases siguientes): implementación completa de auth Google, RBAC/mód
 - **Feedback en formularios:** Todos los modales muestran mensaje de éxito y cierran correctamente (escenario, almacén, producto, stock).
 - **Listado de almacenes:** Vista de inventario ahora muestra almacenes y ubicaciones existentes.
 - **Seed actualizado:** Escenarios con `availableDays` y productos con `complexId` (ya no globales).
+
+## Actualización 2026-11-25
+- **Login móvil:** Eliminado texto decorativo sobre botón Google, padding lateral/vertical correcto, inputs touch-friendly, credenciales demo removidas.
+- **Home grid:** Tarjetas con gradiente azul (claro→oscuro), bordes 3px, relleno 60% opacidad, micro-interacciones hover/active, texto oscuro en tema claro.
+- **Platform admin - Tenant selection:** Ya no auto-selecciona tenant. Selector de Tenant en complejos/escenarios/reservas. Complejos filtrados por tenant seleccionado.
+- **Reservas:** Selector de Tenant + Complejo. Calendario muestra escenarios del complejo seleccionado.
+- **Calendario timezone:** Backend calcula bloques CLOSED en timezone del complejo (`tzOffset`), no UTC. Corregido cierre a las 22:00 local.
+- **Edición en modales:** Complejos y escenarios se editan en modal (no inline). Labels en todos los inputs.
+- **Escenarios - Horario por día:** Al desmarcar "Usar horarios del complejo" muestra weeklySchedule (Dom-Sáb con checkbox/horas). Eliminados "Disponible desde/hasta" y "Días disponibles" separados.
+- **Precios:** Divisa del complejo mostrada después del monto. Emojis ☀️ día / 💡 noche. Step 10, default 100/200.
+- **Mantenimiento:** Solo tabla + botón "Nuevo mantenimiento" que abre modal con labels.
+- **Complejo:** Labels en Nombre/Departamento/Divisa/Zona horaria. Eliminado checkbox "pago posterior" (es por cliente).
