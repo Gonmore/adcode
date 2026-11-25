@@ -368,28 +368,27 @@ function HomePage({ me, refreshMe, unreadCount, notifications, onReadAll }: { me
   }
   return (<div className="space-y-6">
     <DepartmentModal open={deptModal} departments={depts} current={department} onSelect={chooseDepartment} onClose={()=>setDeptModal(false)} />
-    <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-6 text-center">
-      <div className="flex flex-col items-center gap-3 mb-4"><img src="/brand/logo.png" alt="AdCoDe" className="h-20 w-20 object-contain" /><h1 className="text-3xl font-bold">🏟️ AdCoDe</h1><p className="text-slate-600 dark:text-slate-300 max-w-md">Administración de complejos deportivos: reservas, escenarios, ventas, inventario y reportes. ⚽🏀🎾</p></div>
+    <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 sm:p-8 text-center">
+      <div className="flex flex-col items-center gap-3 mb-5"><img src="/brand/logo.png" alt="AdCoDe" className="h-20 w-20 object-contain" /></div>
 
       <div className="mt-4 flex flex-wrap gap-3 items-center justify-center">
         <a href={authCfg?.googleAuthEnabled?"/api/v1/auth/google/start":undefined} onClick={e=>{if(!authCfg?.googleAuthEnabled)e.preventDefault();}} className={`inline-flex items-center gap-2 rounded-md border px-4 py-2 ${authCfg?.googleAuthEnabled?"":"opacity-50 cursor-not-allowed"}`} title={authCfg?.googleAuthEnabled?"Continuar con Google":"Google OAuth pendiente"}><img src="/brand/google-g.png" alt="Google" className="h-5 w-5"/> Continuar con Google 🔐</a>
         {me && <Link to="/admin" className="inline-flex items-center rounded-md border px-4 py-2">Ir al panel 📊</Link>}
       </div>
-      {!me ? (<div className="mt-5 max-w-md mx-auto text-left">
-        <h2 className="font-medium mb-2 inline-flex items-center gap-2"><Icon.key className="w-4 h-4 text-blue-600"/> {mode==="login"?"🔑 Iniciar sesión (email y contraseña)":"Establecer contraseña"}</h2>
-        {mode==="login" ? (<form onSubmit={onLogin} className="space-y-2">
-          <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full border rounded px-3 py-2 bg-transparent" placeholder="Email"/>
-          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border rounded px-3 py-2 bg-transparent" placeholder="Contraseña"/>
-          <div className="flex gap-2"><button className="rounded-md bg-brand text-white px-4 py-2">Entrar 🚀</button><button type="button" onClick={()=>{setMode("set");setErr("");}} className="text-sm underline text-blue-600">Primera vez / establecer contraseña ✨</button></div>
-        </form>) : (<form onSubmit={onSet} className="space-y-2">
-          <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full border rounded px-3 py-2 bg-transparent" placeholder="Email"/>
-          <input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} className="w-full border rounded px-3 py-2 bg-transparent" placeholder="Nueva contraseña (mín. 6)"/>
-          <div className="flex gap-2"><button className="rounded-md bg-brand text-white px-4 py-2">Guardar y entrar ✨</button><button type="button" onClick={()=>setMode("login")} className="text-sm underline">Volver</button></div>
+      {!me ? (<div className="mt-5 max-w-sm mx-auto text-left">
+        <h2 className="font-medium mb-3 inline-flex items-center gap-2"><Icon.key className="w-4 h-4 text-blue-600"/> {mode==="login"?"Iniciar sesión":"Establecer contraseña"}</h2>
+        {mode==="login" ? (<form onSubmit={onLogin} className="space-y-3">
+          <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full border rounded-lg px-4 py-3 bg-transparent text-base" placeholder="Email" autoComplete="email"/>
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border rounded-lg px-4 py-3 bg-transparent text-base" placeholder="Contraseña" autoComplete="current-password"/>
+          <div className="flex gap-2 pt-1"><button className="flex-1 rounded-lg bg-brand text-white px-4 py-3 text-base font-medium">Entrar</button><button type="button" onClick={()=>{setMode("set");setErr("");}} className="text-sm underline text-blue-600 px-2">Establecer contraseña</button></div>
+        </form>) : (<form onSubmit={onSet} className="space-y-3">
+          <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full border rounded-lg px-4 py-3 bg-transparent text-base" placeholder="Email" autoComplete="email"/>
+          <input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} className="w-full border rounded-lg px-4 py-3 bg-transparent text-base" placeholder="Nueva contraseña (mín. 6)" autoComplete="new-password"/>
+          <div className="flex gap-2 pt-1"><button className="flex-1 rounded-lg bg-brand text-white px-4 py-3 text-base font-medium">Guardar y entrar</button><button type="button" onClick={()=>setMode("login")} className="text-sm underline px-2">Volver</button></div>
         </form>)}
         {err && <p className="text-sm mt-2 text-red-600">{err}</p>}{msg && <p className="text-sm mt-2 text-green-700 dark:text-green-400">{msg}</p>}
-        <p className="text-xs mt-2 text-slate-500">Invitado puede navegar sin sesión. Pruebas: admin@supernovatel.com / Admin123! · admin.demo@adcode.test / User123!</p>
       </div>) : (<div className="mt-4 text-sm">Sesión: <b>{(me as any)?.email}</b>{(me as any)?.isPlatformAdmin?" (platform admin)":""} · Departamento: {department} <button className="underline text-blue-600 ml-1" onClick={()=>setDeptModal(true)}>cambiar</button></div>)}
-      <p className="mt-3 text-xs text-slate-500">API: {health?.ok?`OK (${health.version||"dev"})`:"sin conexión"} · Google: {authCfg?.googleAuthEnabled?"configurado":"pendiente"}</p>
+      <p className="mt-4 text-xs text-slate-500">API: {health?.ok?`OK (${health.version||"dev"})`:"sin conexión"} · Google: {authCfg?.googleAuthEnabled?"configurado":"pendiente"}</p>
     </section>
 
     {me && <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
