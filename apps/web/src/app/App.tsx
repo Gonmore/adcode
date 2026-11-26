@@ -70,10 +70,28 @@ function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, o
   allowCreate?: boolean;
   weekView?: boolean;
 }) {
-  const hours = Array.from({ length: 16 }, (_, i) => i + 7);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
   const dayStart = new Date(date + "T00:00:00");
   const rows = scenarios.filter((s: any) => !visibleIds || visibleIds[s.id] !== false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Get complex open/close - try multiple sources
+  const complexOpen = rows[0]?.complex?.openTime || rows[0]?.openTime || "08:00";
+  const complexClose = rows[0]?.complex?.closeTime || rows[0]?.closeTime || "22:00";
+  const [openH] = complexOpen.split(":").map(Number);
+  const [closeH, closeM] = complexClose.split(":").map(Number);
+  const startHour = openH || 8;
+  const endHour = closeH + (closeM > 0 ? 1 : 0) || 22;
+  const visibleHours = hours.filter(h => h >= startHour && h < endHour);
+
+  // Check if a scenario is available at a given hour
+  function isScenarioAvailable(s: any, h: number): boolean {
+    const scOpen = s.openTime || s.complex?.openTime || complexOpen;
+    const scClose = s.closeTime || s.complex?.closeTime || complexClose;
+    const [soH, soM] = scOpen.split(":").map(Number);
+    const [scH, scM] = scClose.split(":").map(Number);
+    return h >= soH && h < scH;
+  }
   useEffect(() => {
     if (!weekView) return;
     const el = scrollRef.current;
@@ -97,9 +115,9 @@ function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, o
         </div>}
       <div className="border rounded overflow-auto">
         <div className="min-w-[860px]">
-          <div className="grid" style={{ gridTemplateColumns: `150px repeat(${hours.length}, minmax(34px,1fr))` }}>
+          <div className="grid" style={{ gridTemplateColumns: `150px repeat(${visibleHours.length}, minmax(34px,1fr))` }}>
             <div className="text-[10px] p-1 border-b border-r bg-slate-50 dark:bg-slate-800 sticky left-0 z-10">Escenario</div>
-            {hours.map(h => <div key={h} className="text-[10px] p-1 border-b text-center bg-slate-50 dark:bg-slate-800">{String(h).padStart(2, "0")}</div>)}
+            {visibleHours.map(h => <div key={h} className="text-[10px] p-1 border-b text-center bg-slate-50 dark:bg-slate-800">{String(h).padStart(2, "0")}</div>)}
             {rows.length === 0 && <div className="col-span-full text-xs text-slate-500 p-3">No hay escenarios visibles. Activa al menos uno.</div>}
             {rows.map((s: any) => {
               const idx = scenarios.findIndex((x: any) => x.id === s.id);
@@ -107,20 +125,22 @@ function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, o
               const blocks = (blocksByScenario[s.id] || []).map((b: any) => ({ s: new Date(b.startAt), e: new Date(b.endAt), status: b.status, type: b.type, reason: b.reason }));
               return (<div key={s.id} className="contents">
                 <div className="text-xs p-1 border-r border-b flex items-center gap-1 sticky left-0 bg-white dark:bg-slate-900 z-10"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c }} />{s.name}</div>
-                {hours.map(h => {
+                {visibleHours.map(h => {
                   const hs = new Date(dayStart); hs.setHours(h, 0, 0, 0); const he = new Date(dayStart); he.setHours(h + 1, 0, 0, 0);
+                  const blocks = (blocksByScenario[s.id] || []).map((b: any) => ({ s: new Date(b.startAt), e: new Date(b.endAt), status: b.status, type: b.type, reason: b.reason }));
                   const block = blocks.find((b: any) => overlaps(hs, he, b.s, b.e));
-                  const allowAny = !!onPickSlotScenario && !block;
+                  const scAvailable = isScenarioAvailable(s, h);
+                  const isClosed = !scAvailable;
+                  const allowAny = !!onPickSlotScenario && !block && scAvailable;
                   const isSel = selectableScenarioId === s.id;
-                  const allowSel = !!(isSel && !block && onPickSlot);
-                  const isClosed = block?.type === "CLOSED";
+                  const allowSel = !!(isSel && !block && scAvailable && onPickSlot);
                   const slotStart = new Date(dayStart); slotStart.setHours(h,0,0,0);
                   const slotEnd = new Date(slotStart.getTime() + 60*60*1000);
                   const isPast = slotEnd <= new Date();
-                  const txt = block ? (isClosed ? "Cerr" : block.type === "MAINTENANCE" ? "Mant" : block.status === "PENDING_PAYMENT" ? "Hold" : block.status === "PENDING_CONFIRMATION" ? "Pend" : block.status === "SCHEDULED" ? "Fija" : "Res") : "";
+                  const txt = block ? (block.type === "MAINTENANCE" ? "Mant" : block.status === "PENDING_PAYMENT" ? "Hold" : block.status === "PENDING_CONFIRMATION" ? "Pend" : block.status === "SCHEDULED" ? "Fija" : "Res") : isClosed ? "Cerr" : "";
                   const canPick = (allowAny || allowSel) && !isPast;
-                  const title = block ? `${s.name}: ${isClosed ? (block.reason || "Cerrado") : txt} ${new Date(block.s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}-${new Date(block.e).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : (canPick ? "Disponible (clic para seleccionar y crear reserva)" : "Disponible");
-                  return <button type="button" key={s.id + "-" + h} disabled={!canPick} onClick={() => { const start = String(h).padStart(2, "0") + ":00"; const end = String(Math.min(h + 1, 23)).padStart(2, "0") + ":00"; if (allowAny) { onPickSlotScenario!(s.id, start, end); } else if (allowSel) { onPickSlot!(start, end); } }} title={title} className={`h-9 sm:h-8 border-b border-l text-[10px] font-medium ${isClosed ? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300" : block ? "text-white" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300"} ${canPick ? "hover:bg-emerald-200 dark:hover:bg-emerald-900/40 cursor-pointer ring-inset" : "cursor-default"} ${selectableScenarioId && !isSel && !block ? "opacity-90" : ""}`} style={{ background: block && !isClosed ? c : undefined }}>{txt}</button>;
+                  const title = block ? `${s.name}: ${txt} ${new Date(block.s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}-${new Date(block.e).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : isClosed ? `${s.name}: Cerrado` : (canPick ? "Disponible" : "No disponible");
+                  return <button type="button" key={s.id + "-" + h} disabled={!canPick} onClick={() => { const start = String(h).padStart(2, "0") + ":00"; const end = String(Math.min(h + 1, 23)).padStart(2, "0") + ":00"; if (allowAny) { onPickSlotScenario!(s.id, start, end); } else if (allowSel) { onPickSlot!(start, end); } }} title={title} className={`h-9 sm:h-8 border-b border-l text-[10px] font-medium ${isClosed ? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300" : block ? "text-white" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300"} ${canPick ? "hover:bg-emerald-200 dark:hover:bg-emerald-900/40 cursor-pointer" : "cursor-default"}`} style={{ background: block ? c : undefined }}>{txt}</button>;
                 })}
               </div>);
             })}
@@ -159,7 +179,7 @@ function AvailabilityCalendar({ date, scenarios, blocksByScenario, visibleIds, o
         <div className="grid" style={{ gridTemplateColumns: `48px repeat(7, minmax(68px,1fr))` }}>
           <div className="text-[10px] p-1 border-b border-r bg-slate-50 dark:bg-slate-800 sticky left-0 z-20">Hora</div>
           {days.map((d, i) => { const isToday = d.toDateString() === new Date().toDateString(); return <div key={i} className={`text-[10px] p-1 border-b text-center font-medium ${isToday ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : "bg-slate-50 dark:bg-slate-800"}`}>{isToday && <span className="block text-[12px] leading-none">▼</span>}{dayLabels[i]}<br />{d.getDate()}/{d.getMonth() + 1}</div>; })}
-          {hours.map(h => (
+          {visibleHours.map(h => (
             <div key={h} className="contents">
               <div className="text-[10px] p-1 border-r border-b bg-slate-50 dark:bg-slate-800 sticky left-0 z-20 text-center">{String(h).padStart(2, "0")}:00</div>
               {days.map((day, di) => {
@@ -222,29 +242,30 @@ function Layout({ children, me, onLogout, unread, refreshMe, hideHeader, imperso
   const canChangePassword = !!(me?.hasPassword) || !(me?.hasGoogle);
   async function saveProfile(e:FormEvent){ e.preventDefault(); setPBusy(true); setPErr(""); setPMsg(""); try{ await apiFetch("/auth/me",{method:"PATCH",body:JSON.stringify({name:pName||null,avatarUrl:pAvatar||null})}); await refreshMe(); setPMsg("Perfil actualizado."); }catch(err:any){ setPErr(err.message||"Error"); } finally{ setPBusy(false); } }
   async function changePw(e:FormEvent){ e.preventDefault(); setPBusy(true); setPErr(""); setPMsg(""); try{ await apiFetch("/auth/change-password",{method:"POST",body:JSON.stringify({currentPassword: me?.hasPassword ? pCur : undefined, newPassword: pNew})}); setPCur(""); setPNew(""); await refreshMe(); setPMsg("Contraseña actualizada."); }catch(err:any){ setPErr(err.message||"Error"); } finally{ setPBusy(false); } }
-  if (hideHeader) return (<div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100"><div className="flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</div><footer className="border-t border-slate-200 dark:border-slate-800 py-4 px-4"><div className="mx-auto max-w-6xl flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300"><span>POWERED by</span><img src={sntLogo} alt="Supernovatel" className="h-5 object-contain"/></div></footer></div>);
-  return (<div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+  if (hideHeader) return <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100"><div className="flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</div><footer className="border-t border-slate-200 dark:border-slate-800 py-4 px-4"><div className="mx-auto max-w-6xl flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300"><span>POWERED by</span><img src={sntLogo} alt="Supernovatel" className="h-5 object-contain"/></div></footer></div>;
+  return <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    {menuOpen && <div className="fixed inset-0 z-40" onClick={()=>setMenuOpen(false)} />}
+    {userMenuOpen && <div className="fixed inset-0 z-40" onClick={()=>setUserMenuOpen(false)} />}
     <header className="sticky top-0 z-40 border-b border-slate-200/70 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur relative">
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between gap-3">
-        <button className="p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menú" onClick={()=>setMenuOpen(v=>!v)}><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current"/></button>
+        <button className="p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menú" onClick={()=>{setMenuOpen(v=>!v);setUserMenuOpen(false);}}><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current mb-1"/><span className="block w-5 h-0.5 bg-current"/></button>
         <Link to="/" aria-label="Inicio" className="flex items-center gap-2"><img src="/brand/logo.png" alt={cfg.appName} className="h-9 w-9 object-contain"/>{unread>0 && <span className="inline-flex items-center text-xs text-red-600"><Icon.bell className="w-4 h-4"/><Badge count={unread}/></span>}</Link>
         <div className="relative flex items-center gap-2">
           {impersonate && onBackToPlatform && <button onClick={onBackToPlatform} className="rounded-md border px-2 py-1 text-xs" title="Volver a platform admin">⬅️</button>}
-          <button className="h-9 w-9 rounded-full bg-brand text-white font-semibold flex items-center justify-center overflow-hidden" onClick={()=>setUserMenuOpen(v=>!v)}>{me?.avatarUrl ? <img src={me.avatarUrl} alt="" className="h-full w-full object-cover"/> : (me?.name||me?.email||"I").slice(0,1).toUpperCase()}</button>
-          {userMenuOpen && <><div className="fixed inset-0 z-40" onClick={()=>setUserMenuOpen(false)} /><div className="fixed top-14 right-2 w-72 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm z-50">
-            <div className="px-3 py-2 text-xs text-slate-500 truncate">{me?me.email:"Invitado (sin sesión)"}</div>
-            <button onClick={()=>{toggle();setUserMenuOpen(false);}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">Tema ({theme==="dark"?"oscuro":"claro"})</button>
-            {me && <button onClick={()=>{setUserMenuOpen(false);setProfileOpen(true);}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">Editar perfil</button>}
-            {me && <button onClick={()=>{setUserMenuOpen(false);onLogout();}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-red-600">Cerrar sesión</button>}
-            {!me && <div className="px-3 py-2 text-xs text-slate-500">Acceso de invitado: puedes ver complejos y reservar.</div>}
-          </div></>}
+          <button className="h-9 w-9 rounded-full bg-brand text-white font-semibold flex items-center justify-center overflow-hidden" onClick={()=>{setUserMenuOpen(v=>!v);setMenuOpen(false);}}>{me?.avatarUrl ? <img src={me.avatarUrl} alt="" className="h-full w-full object-cover"/> : (me?.name||me?.email||"I").slice(0,1).toUpperCase()}</button>
         </div>
       </div>
-      {menuOpen && <><div className="fixed inset-0 z-40" onClick={()=>setMenuOpen(false)} /><div className="absolute left-2 top-14 z-50 w-64 max-w-[80vw] rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm"><nav className="flex flex-col">{nav.map((i,idx)=> <NavLink key={i.to+"-"+idx} to={i.to} onClick={()=>setMenuOpen(false)} className={({isActive})=>`px-3 py-2 rounded ${isActive?"bg-slate-100 dark:bg-slate-800 font-medium":"hover:bg-slate-100 dark:hover:bg-slate-800"}`}>{i.label}</NavLink>)}</nav></div></>}
+      {menuOpen && <div className="fixed left-2 top-14 z-50 w-64 max-w-[80vw] rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm"><nav className="flex flex-col">{nav.map((i,idx)=> <NavLink key={i.to+"-"+idx} to={i.to} onClick={()=>setMenuOpen(false)} className={({isActive})=>`px-3 py-2 rounded ${isActive?"bg-slate-100 dark:bg-slate-800 font-medium":"hover:bg-slate-100 dark:hover:bg-slate-800"}`}>{i.label}</NavLink>)}</nav></div>}
+      {userMenuOpen && <div className="fixed top-14 right-2 z-50 w-72 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm">
+        <div className="px-3 py-2 text-xs text-slate-500 truncate">{me?me.email:"Invitado (sin sesión)"}</div>
+        <button onClick={()=>{toggle();setUserMenuOpen(false);}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">Tema ({theme==="dark"?"oscuro":"claro"})</button>
+        {me && <button onClick={()=>{setUserMenuOpen(false);setProfileOpen(true);}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">Editar perfil</button>}
+        {me && <button onClick={()=>{setUserMenuOpen(false);onLogout();}} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-red-600">Cerrar sesión</button>}
+        {!me && <div className="px-3 py-2 text-xs text-slate-500">Acceso de invitado: puedes ver complejos y reservar.</div>}
+      </div>}
     </header>
-    <main className="flex-1 mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-8 overflow-x-hidden pb-32">{children}</main>
+    <div className="flex-1 mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-8 overflow-x-hidden pb-32">{children}</div>
     <footer className="border-t border-slate-200 dark:border-slate-800 py-4 px-4"><div className="mx-auto max-w-6xl flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300"><span>POWERED by</span><img src={sntLogo} alt="Supernovatel" className="h-5 object-contain"/></div></footer>
-
     {profileOpen && me && <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"><div className="w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-4 max-h-[90vh] overflow-auto">
       <div className="flex items-center justify-between"><h2 className="font-semibold">Editar perfil</h2><button onClick={()=>setProfileOpen(false)} className="text-sm px-2 py-1 rounded border">Cerrar</button></div>
       {(pErr||pMsg)&&<div className="text-sm">{pErr&&<span className="text-red-600 mr-2">{pErr}</span>}{pMsg&&<span className="text-green-700 dark:text-green-400">{pMsg}</span>}</div>}
@@ -269,7 +290,7 @@ function Layout({ children, me, onLogout, unread, refreshMe, hideHeader, imperso
         )}
       </div>
     </div></div>}
-  </div>);
+  </div>;
 }
 
 function DepartmentModal({ open, departments, current, onSelect, onClose }: { open: boolean; departments: readonly string[]; current?: string|null; onSelect: (d: string)=>void; onClose: ()=>void }) {

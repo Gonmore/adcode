@@ -24,7 +24,7 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     }
     const scenarios = await prisma.scenario.findMany({
       where: resolvedComplexId ? { complexId: resolvedComplexId } : undefined,
-      include: { pricingRules: true, group: true, complex: { select: { id: true, slug: true, name: true, timezone: true, currency: true, tenantId: true } } },
+      include: { pricingRules: true, group: true, complex: { select: { id: true, slug: true, name: true, timezone: true, currency: true, tenantId: true, openTime: true, closeTime: true } } },
       orderBy: [{ complexId: "asc" }, { name: "asc" }],
     });
     return { data: scenarios };
@@ -75,37 +75,8 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     };
     const dayMs = 24*60*60*1000;
     const tz = (scenario.complex as any).timezone || "America/La_Paz";
-    let cur = new Date(from); cur.setHours(0,0,0,0);
-    const endDay = new Date(to); endDay.setHours(0,0,0,0);
-    for (let d = new Date(cur); d <= endDay; d = new Date(d.getTime() + dayMs)) {
-      const dayStart = new Date(d); const dayEnd = new Date(d); dayEnd.setHours(23,59,59,999);
-      // Get day of week in complex timezone
-      const dayOfWeek = new Date(d.toLocaleString("en-US", { timeZone: tz, weekday: "short" }));
-      const dowMap: Record<string, number> = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
-      const dayDow = dowMap[dayOfWeek.toLocaleString("en-US", { timeZone: tz, weekday: "short" })] ?? d.getDay();
-      if (!schedule.availableDays.includes(dayDow)) {
-        const s = dayStart < from ? from : dayStart; const e = dayEnd > to ? to : dayEnd;
-        if (s < e) closedBlocks.push({ type: "CLOSED", startAt: s.toISOString(), endAt: e.toISOString(), reason: "Día no disponible" });
-        continue;
-      }
-      const os = openStr(dayDow); const cs = closeStr(dayDow);
-      if (os === null || cs === null) {
-        const s = dayStart < from ? from : dayStart; const e = dayEnd > to ? to : dayEnd;
-        if (s < e) closedBlocks.push({ type: "CLOSED", startAt: s.toISOString(), endAt: e.toISOString(), reason: "Complejo cerrado este día" });
-        continue;
-      }
-      const [oh,om] = os.split(":").map(Number); const [ch,cm] = cs.split(":").map(Number);
-      // Create open/close times in the complex timezone, then convert to UTC
-      const dateStr = d.toISOString().slice(0,10);
-      const openAt = new Date(`${dateStr}T${String(oh).padStart(2,"0")}:${String(om).padStart(2,"0")}:00${tzOffset(tz)}`);
-      const closeAt = new Date(`${dateStr}T${String(ch).padStart(2,"0")}:${String(cm).padStart(2,"0")}:00${tzOffset(tz)}`);
-      if (openAt > closeAt) continue;
-      const beforeS = dayStart < from ? from : dayStart; const beforeE = openAt > to ? to : openAt;
-      if (beforeS < beforeE) closedBlocks.push({ type: "CLOSED", startAt: beforeS.toISOString(), endAt: beforeE.toISOString(), reason: "Fuera de horario" });
-      const afterS = closeAt < from ? from : closeAt; const afterE = dayEnd > to ? to : dayEnd;
-      if (afterS < afterE) closedBlocks.push({ type: "CLOSED", startAt: afterS.toISOString(), endAt: afterE.toISOString(), reason: "Fuera de horario" });
-    }
-    return { data: { scenarioId: id, from: from.toISOString(), to: to.toISOString(), schedule, blocks: [...activeReservations.map((r) => ({ type: "RESERVATION", id: r.id, startAt: r.startAt, endAt: r.endAt, status: r.status, clientName: r.clientName, people: r.people, note: r.note, membershipId: r.membershipId, reservationSeriesId: r.reservationSeriesId, seriesPaidAt: r.seriesPaidAt, client: r.membership?.user || null })), ...maintenances.map((m) => ({ type: "MAINTENANCE", id: m.id, startAt: m.startAt, endAt: m.endAt, reason: m.reason })), ...closedBlocks] } };
+    // No generate CLOSED blocks - frontend handles availability based on complex/scenario hours
+    return { data: { scenarioId: id, from: from.toISOString(), to: to.toISOString(), schedule, blocks: [...activeReservations.map((r) => ({ type: "RESERVATION", id: r.id, startAt: r.startAt, endAt: r.endAt, status: r.status, clientName: r.clientName, people: r.people, note: r.note, membershipId: r.membershipId, reservationSeriesId: r.reservationSeriesId, seriesPaidAt: r.seriesPaidAt, client: r.membership?.user || null })), ...maintenances.map((m) => ({ type: "MAINTENANCE", id: m.id, startAt: m.startAt, endAt: m.endAt, reason: m.reason }))] } };
   });
 
   app.post("/", async (req, reply) => {
