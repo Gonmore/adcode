@@ -138,7 +138,7 @@ ssh "$SERVER_USER@$SERVER_IP" "SERVER_PATH=$SERVER_PATH VERSION=$VERSION PROD_UR
     fi
     if [ -n "$FAILED" ]; then
       echo "⚠️  Migración fallida detectada: $FAILED. Marcando rolled-back y reintentando..."
-      "${COMPOSE[@]}" --profile tools run --rm api-migrate npx prisma migrate resolve --rolled-back "$FAILED" --schema prisma/schema.prisma </dev/null
+      "${COMPOSE[@]}" --profile tools run --rm api-migrate npx --no-install prisma migrate resolve --rolled-back "$FAILED" --schema apps/api/prisma/schema.prisma </dev/null
       "${COMPOSE[@]}" --profile tools run --rm api-migrate </dev/null
     else
       echo "❌ Falló migrate deploy y no se pudo identificar la migración fallida" >&2
