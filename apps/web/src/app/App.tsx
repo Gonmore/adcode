@@ -59,7 +59,7 @@ function estimateScenarioPrice(complex:any, scenario:any, date:string, start:str
 
 function money(v:any, currency?:string){ const n=Number(v||0); return `${n.toFixed(2)} ${currency||"BOB"}`; }
 
-function parseHHMM(v?: string | null, fb = "08:00") { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v||"")); return m ? { h: Number(m[1]), m: Number(m[2]) } : parseHHMM(fb, "08:00"); }
+function parseHHMM(v?: string | null, fb = "08:00"): { h: number; m: number } { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v||"")); return m ? { h: Number(m[1]), m: Number(m[2]) } : parseHHMM(fb, "08:00"); }
 const normName = (v?: string) => String(v || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 function scenarioDayWindow(s: any, complex: any, dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
