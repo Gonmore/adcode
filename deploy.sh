@@ -126,7 +126,25 @@ ssh "$SERVER_USER@$SERVER_IP" "SERVER_PATH=$SERVER_PATH VERSION=$VERSION PROD_UR
 
   echo "🗄️  Aplicando migraciones Prisma versionadas..."
   STEP_STARTED=$SECONDS
-  "${COMPOSE[@]}" --profile tools run --rm api-migrate </dev/null
+  set +e
+  MIGRATE_OUT=$("${COMPOSE[@]}" --profile tools run --rm api-migrate </dev/null 2>&1)
+  MIGRATE_RC=$?
+  set -e
+  echo "$MIGRATE_OUT"
+  if [ "$MIGRATE_RC" -ne 0 ]; then
+    FAILED=$(echo "$MIGRATE_OUT" | sed -n 's/.*Migration name: \([^ ]*\).*/\1/p' | tail -n 1)
+    if [ -z "$FAILED" ]; then
+      FAILED=$(echo "$MIGRATE_OUT" | sed -n 's/.*The `\([^`]*\)` migration.*failed.*/\1/p' | tail -n 1)
+    fi
+    if [ -n "$FAILED" ]; then
+      echo "⚠️  Migración fallida detectada: $FAILED. Marcando rolled-back y reintentando..."
+      "${COMPOSE[@]}" --profile tools run --rm api-migrate npx prisma migrate resolve --rolled-back "$FAILED" --schema prisma/schema.prisma </dev/null
+      "${COMPOSE[@]}" --profile tools run --rm api-migrate </dev/null
+    else
+      echo "❌ Falló migrate deploy y no se pudo identificar la migración fallida" >&2
+      exit "$MIGRATE_RC"
+    fi
+  fi
   echo "⏱️  Prisma migrate deploy remoto: $(format_elapsed "$((SECONDS - STEP_STARTED))")"
 
   echo "🔄 Reiniciando contenedores..."
