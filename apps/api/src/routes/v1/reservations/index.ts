@@ -25,25 +25,49 @@ function parseHHMM(v: string | null | undefined, fallback: string) {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 function timeToMinutes(hhmm: string) { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; }
+function partsInTz(date: Date, tz: string) {
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz || "America/La_Paz", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  const p: any = Object.fromEntries(fmt.formatToParts(date).map(x => [x.type, x.value]));
+  const wd: any = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const hour = p.hour === "24" ? 0 : Number(p.hour);
+  return { year: Number(p.year), month: Number(p.month), day: Number(p.day), dow: wd[p.weekday] ?? 0, hour, minute: Number(p.minute), ymd: `${p.year}-${p.month}-${p.day}` };
+}
+function dayWindowInTz(complex: any, scenario: any, date: Date, tz: string) {
+  const d = partsInTz(date, tz);
+  const dow = d.dow;
+  const days: number[] = Array.isArray(scenario?.availableDays) && scenario.availableDays.length ? scenario.availableDays : [0,1,2,3,4,5,6];
+  if (!days.includes(dow)) return null;
+  const cws = complex?.weeklySchedule || null;
+  const sws = scenario?.weeklySchedule || null;
+  const ds = sws ? (sws[String(dow)] ?? sws[dow] ?? null) : cws ? (cws[String(dow)] ?? cws[dow] ?? null) : null;
+  if (ds && ds.closed) return null;
+  let open = scenario?.openTime || ds?.open || null;
+  let close = scenario?.closeTime || ds?.close || null;
+  if (!open) open = (dow === 0 || dow === 6) ? (complex?.weekendOpenTime || complex?.openTime || "08:00") : (complex?.openTime || "08:00");
+  if (!close) close = (dow === 0 || dow === 6) ? (complex?.weekendCloseTime || complex?.closeTime || "22:00") : (complex?.closeTime || "22:00");
+  open = parseHHMM(open, "08:00"); close = parseHHMM(close, "22:00");
+  const openMin = timeToMinutes(open); const closeMin = timeToMinutes(close);
+  if (!(closeMin > openMin)) return null;
+  return { open, close, openMin, closeMin, ymd: d.ymd, dow };
+}
 
 function assertWithinSchedule(complex: any, scenario: any, startAt: Date, endAt: Date) {
-  const open = parseHHMM(scenario?.openTime || complex?.openTime, "08:00");
-  const close = parseHHMM(scenario?.closeTime || complex?.closeTime, "22:00");
-  const availableDays: number[] = Array.isArray(scenario?.availableDays) && scenario.availableDays.length ? scenario.availableDays : [0, 1, 2, 3, 4, 5, 6];
-  if (open >= close) return;
-  if (startAt.toDateString() !== endAt.toDateString()) {
+  const tz = complex?.timezone || "America/La_Paz";
+  const s = partsInTz(startAt, tz);
+  const e = partsInTz(endAt, tz);
+  if (s.ymd !== e.ymd) {
     const err: any = new Error("La reserva debe estar dentro del mismo día y horario de atención/disponibilidad.");
     err.code = "OUTSIDE_SCHEDULE"; throw err;
   }
-  if (!availableDays.includes(startAt.getDay())) {
+  const win = dayWindowInTz(complex, scenario, startAt, tz);
+  if (!win) {
     const err: any = new Error("El escenario no está disponible ese día.");
     err.code = "OUTSIDE_SCHEDULE"; throw err;
   }
-  const startMin = startAt.getHours() * 60 + startAt.getMinutes();
-  const endMin = endAt.getHours() * 60 + endAt.getMinutes();
-  const openMin = timeToMinutes(open); const closeMin = timeToMinutes(close);
-  if (startMin < openMin || endMin > closeMin) {
-    const err: any = new Error(`Horario fuera de atención/disponibilidad (${open}-${close}).`);
+  const startMin = s.hour * 60 + s.minute;
+  const endMin = e.hour * 60 + e.minute;
+  if (startMin < win.openMin || endMin > win.closeMin) {
+    const err: any = new Error(`Horario fuera de atención/disponibilidad (${win.open}-${win.close}).`);
     err.code = "OUTSIDE_SCHEDULE"; throw err;
   }
 }
