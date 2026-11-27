@@ -149,7 +149,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
 
   app.post("/products", async (req, reply) => {
     const presSchema = z.object({ name: z.string().min(1), unitsPerPack: z.number().int().positive().default(1), barcode: z.string().optional(), cost: z.number().nonnegative().default(0), price: z.number().nonnegative().default(0) });
-    const body = z.object({ complexId: z.string(), name: z.string().min(1), categoryId: z.string().optional().nullable(), supplierId: z.string().optional().nullable(), notes: z.string().optional().nullable(), imageKey: z.string().optional().nullable(), cost: z.number().nonnegative().optional(), price: z.number().nonnegative().optional(), presentations: z.array(presSchema).min(1) }).safeParse(req.body);
+    const body = z.object({ complexId: z.string(), name: z.string().min(1), categoryId: z.string().optional().nullable(), supplierId: z.string().optional().nullable(), notes: z.string().optional().nullable(), imageKey: z.string().optional().nullable(), imageUrl: z.string().optional().nullable(), cost: z.number().nonnegative().optional(), price: z.number().nonnegative().optional(), presentations: z.array(presSchema).min(1) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: body.error.issues[0]?.message || "Datos inválidos" });
     const cx = await ensureComplexAccess(req, reply, body.data.complexId, false); if (!cx) return;
     if (!(await assertTenantActive(cx.tenantId, reply))) return;
@@ -157,7 +157,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     const basePrice = body.data.price ?? body.data.presentations[0].price ?? 0;
     const product = await prisma.product.create({
       data: {
-        complexId: body.data.complexId, name: body.data.name, notes: body.data.notes || null, imageKey: body.data.imageKey || null,
+        complexId: body.data.complexId, name: body.data.name, notes: body.data.notes || null, imageKey: body.data.imageKey || null, imageUrl: body.data.imageUrl || null,
         categoryId: body.data.categoryId || null, supplierId: body.data.supplierId || null,
         cost: baseCost as any, price: basePrice as any, active: true,
         presentations: { create: body.data.presentations.map(p => ({ name: p.name, unitsPerPack: p.unitsPerPack || 1, barcode: p.barcode || null, cost: p.cost as any, price: p.price as any, active: true })) },
@@ -169,7 +169,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
 
   app.patch("/products/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().min(1).optional(), categoryId: z.string().nullable().optional(), supplierId: z.string().nullable().optional(), notes: z.string().nullable().optional(), imageKey: z.string().nullable().optional(), active: z.boolean().optional(), cost: z.number().nonnegative().optional(), price: z.number().nonnegative().optional() }).safeParse(req.body);
+    const body = z.object({ name: z.string().min(1).optional(), categoryId: z.string().nullable().optional(), supplierId: z.string().nullable().optional(), notes: z.string().nullable().optional(), imageKey: z.string().nullable().optional(), imageUrl: z.string().nullable().optional(), active: z.boolean().optional(), cost: z.number().nonnegative().optional(), price: z.number().nonnegative().optional() }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Datos inválidos" });
     const existing = await prisma.product.findUnique({ where: { id }, include: { complex: true } });
     if (!existing) return reply.code(404).send({ error: "NOT_FOUND", message: "Producto no encontrado" });

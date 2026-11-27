@@ -92,4 +92,75 @@ export default async function reportsRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get("/details", async (req, reply) => {
+    await requireAuth(req, reply); if (reply.sent) return;
+    const q = z.object({ complexId: z.string().optional(), from: z.string().datetime().optional(), to: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(500).default(200) }).safeParse(req.query || {});
+    if (!q.success) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Parámetros inválidos" });
+    try {
+      const whereTx: any = {};
+      if (q.data.complexId) whereTx.complexId = q.data.complexId;
+      if (!isPlatformAdmin(req.authUser)) {
+        const tenantIds = Array.from(new Set((req.authUser?.memberships || []).map((m: any) => m.tenantId)));
+        whereTx.complex = { tenantId: { in: tenantIds } };
+      }
+      if (q.data.from || q.data.to) whereTx.occurredAt = { ...(q.data.from ? { gte: new Date(q.data.from) } : {}), ...(q.data.to ? { lte: new Date(q.data.to) } : {}) };
+
+      const txs = await prisma.financialTransaction.findMany({ where: whereTx, orderBy: { occurredAt: "desc" }, take: q.data.limit });
+      const resIds = txs.filter(t => String(t.source) === "RESERVATION" && t.refId).map(t => t.refId!).filter(Boolean);
+      const orderIds = txs.filter(t => String(t.source) === "SALE" && t.refId).map(t => t.refId!).filter(Boolean);
+      const [reservations, orders] = await Promise.all([
+        resIds.length ? prisma.reservation.findMany({ where: { id: { in: Array.from(new Set(resIds)) } }, include: { scenario: { select: { name: true } }, membership: { include: { user: { select: { name: true, email: true } } } } } }) : Promise.resolve([]),
+        orderIds.length ? prisma.order.findMany({ where: { id: { in: Array.from(new Set(orderIds)) } }, include: { lines: { include: { product: { select: { name: true } }, presentation: { select: { name: true } } } } } }) : Promise.resolve([]),
+      ]);
+      const resById = new Map(reservations.map((r:any) => [r.id, r]));
+      const orderById = new Map(orders.map((o:any) => [o.id, o]));
+
+      const incomes: any[] = [];
+      const expenses: any[] = [];
+      for (const t of txs) {
+        const base = { id: t.id, date: t.occurredAt, amount: Number(t.amount || 0), source: String(t.source), type: String(t.type), method: t.method ? String(t.method) : null, note: t.note || null, refType: t.refType || null, refId: t.refId || null };
+        if (String(t.type) === "INCOME") {
+          if (String(t.source) === "RESERVATION") {
+            const r: any = t.refId ? resById.get(t.refId) : null;
+            incomes.push({ ...base, client: r?.clientName || r?.membership?.user?.name || r?.membership?.user?.email || null, detail: r ? `Reserva ${r.code || ""} · ${r.scenario?.name || "Escenario"}`.trim() : (t.note || "Reserva"), reservationDate: r?.startAt || null, reservationEnd: r?.endAt || null });
+          } else if (String(t.source) === "SALE") {
+            const o: any = t.refId ? orderById.get(t.refId) : null;
+            const items = (o?.lines || []).map((l: any) => `${l.product?.name || "Producto"}${l.presentation?.name ? ` (${l.presentation.name})` : ""} x${l.qty}`).slice(0, 6).join(", ");
+            incomes.push({ ...base, client: o?.clientName || null, detail: items ? `Venta: ${items}` : (t.note || "Venta") });
+          } else {
+            incomes.push({ ...base, client: null, detail: t.note || String(t.source) });
+          }
+        } else {
+          expenses.push({ ...base, supplier: null, detail: t.note || String(t.source) });
+        }
+      }
+
+      const whereEntry: any = {};
+      if (q.data.complexId) whereEntry.complexId = q.data.complexId;
+      if (!isPlatformAdmin(req.authUser)) { const tenantIds = Array.from(new Set((req.authUser?.memberships || []).map((m: any) => m.tenantId))); whereEntry.complex = { tenantId: { in: tenantIds } }; }
+      if (q.data.from || q.data.to) whereEntry.createdAt = { ...(q.data.from ? { gte: new Date(q.data.from) } : {}), ...(q.data.to ? { lte: new Date(q.data.to) } : {}) };
+      const entries = await prisma.stockEntry.findMany({ where: whereEntry, include: { supplier: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 200 }).catch(() => []);
+      const supMap = new Map<string, any>();
+      for (const e of entries as any[]) {
+        const name = e.supplier?.name || "Sin proveedor";
+        const cur = supMap.get(name) || { name, count: 0, amount: 0, detailParts: [] as string[] };
+        cur.count += 1;
+        cur.amount += Number(e.total || 0);
+        const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString() : "";
+        if (cur.detailParts.length < 4) cur.detailParts.push(`${d}${e.notes ? `: ${e.notes}` : ""}`.trim());
+        supMap.set(name, cur);
+        if (Number(e.total || 0) > 0) {
+          expenses.unshift({ id: `entry-${e.id}`, date: e.createdAt, amount: Number(e.total || 0), source: "SUPPLIER_PAYMENT", type: "EXPENSE", method: e.paymentMethod ? String(e.paymentMethod) : null, note: e.notes || null, supplier: e.supplier?.name || null, detail: e.notes ? `Compra inventario: ${e.notes}` : "Compra/ingreso de inventario" });
+        }
+      }
+      const suppliers = Array.from(supMap.values()).map(s => ({ name: s.name, count: s.count, amount: s.amount, detail: s.detailParts.filter(Boolean).join(" · ") })).sort((a,b)=>b.amount-a.amount);
+      const seenExp = new Set<string>();
+      const dedupExp = expenses.filter(e => { const k = String(e.id||`${e.date}-${e.amount}-${e.note}`); if (seenExp.has(k)) return false; seenExp.add(k); return true; });
+      return { data: { incomes, expenses: dedupExp, suppliers } };
+    } catch (err) {
+      app.log.warn({ err }, "Failed reports details");
+      return reply.code(503).send({ error: "DB_NOT_READY", message: "Base de datos no disponible/migrada" });
+    }
+  });
+
 }

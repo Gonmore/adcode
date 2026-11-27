@@ -29,6 +29,15 @@
 - `POST /auth/login`, `POST /auth/set-password`, `POST /auth/change-password`, `GET /auth/me`, `POST /auth/refresh`, `POST /auth/logout`.
 - `PATCH /auth/me/preferences` - guardar preferencias del usuario `{ lastDepartment }` (recordar/cambiar departamento).
 
+## Reportes (`/reports`) - auth requerida
+- `GET /reports/summary?complexId=` - KPIs: tenants, complejos, reservas, transacciones, ingresos, egresos, neto.
+- `GET /reports/income-vs-expense?complexId=&from=&to=&groupBy=day|week|month|year` - serie agregada por periodo.
+- `GET /reports/by-source?complexId=&from=&to=` - totales por origen/tipo.
+- `GET /reports/details?complexId=&from=&to=&limit=` - detalle para UI: `incomes` (fecha, origen, cliente, detalle, método, fecha reserva), `expenses` (fecha, origen, proveedor, detalle, monto), `suppliers` (agregado desde StockEntry).
+
+## Inventario/Productos (`/inventory`)
+- `POST/PATCH /inventory/products` y `/inventory/products/:id` aceptan `imageUrl` (además de `imageKey`) para foto por URL; la API de menú/ventas la expone en respuestas.
+
 ## Notas
 - Notificaciones: in-app (panel/home con badges y listado). WhatsApp se coordina externamente usando teléfonos registrados (sin envío desde el sistema).
 - Reservas fijas: se mantienen hasta cancelación de serie por cliente o falta (`no-show`) marcada por admin/vendedor.
@@ -49,3 +58,10 @@
 - **Calendario timezone:** `GET /scenarios/:id/availability` ahora calcula bloques CLOSED en timezone del complejo (no UTC). `tzOffset()` convierte horarios locales a UTC correctamente.
 - **Platform admin:** No auto-selecciona tenant. UI requiere selección explícita de Tenant en complejos/escenarios/reservas.
 - **Complejos:** `allowClientPayLater` ya no se edita desde complejo (es por cliente).
+
+## Actualización 2026-11-27
+- **Reportes:** nuevo `GET /reports/details` con ingresos/egresos detallados y proveedores; UI con gráficas CSS/SVG y tablas (cliente, fecha reserva, proveedor, detalle).
+- **Productos:** `imageUrl` en Producto (además de `imageKey`), expuesto en inventario/menú/ventas; UI muestra imagen en menú digital, ventas, productos e inventario.
+- **Inventario:** ingreso de stock multi-producto con borrador, footer sticky “Confirmar ingresos”, egreso estimado por costo y nota.
+- **Ventas:** confirmar venta abre modal de pago efectivo/QR/mixto; efectivo con cortes rápidos BOB 10/20/50/100/200 + Exacto.
+- **Menú digital/QR por rol:** admin/vendedor complejo abre su complejo; tenant admin elige complejo; platform admin elige tenant+complejo.

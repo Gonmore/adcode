@@ -149,3 +149,11 @@ Pendiente (fases siguientes): implementación completa de auth Google, RBAC/mód
 - **Precios:** Divisa del complejo mostrada después del monto. Emojis ☀️ día / 💡 noche. Step 10, default 100/200.
 - **Mantenimiento:** Solo tabla + botón "Nuevo mantenimiento" que abre modal con labels.
 - **Complejo:** Labels en Nombre/Departamento/Divisa/Zona horaria. Eliminado checkbox "pago posterior" (es por cliente).
+
+## Actualización 2026-11-27
+- **Reportes detallados:** `/reports/details` agrega detalle de ingresos/egresos/proveedores (cliente, fecha reserva, proveedor, notas). UI de reportes incluye gráficas CSS/SVG sin dependencia nueva.
+- **Producto imageUrl:** `Product.imageUrl` complementa `imageKey`; menú público, ventas, productos e inventario renderizan imagen. Requiere migración Prisma.
+- **Inventario multi-ingreso:** borrador por lote con footer sticky de confirmación, costo estimado y nota; registra entradas vía `/inventory/stock/in` con `registerExpense`.
+- **Flujo de cobro ventas:** confirmación abre modal efectivo/QR/mixto; efectivo soporta cortes BOB 10/20/50/100/200 y monto exacto.
+- **Menú digital + QR:** selector por rol (complejo directo / tenant elige complejo / platform elige tenant+complejo), QR público por `/menu/:slug`.
+- **Deploy:** `deploy.sh` aplica `prisma migrate deploy` antes de `up -d`; incluir migración para `Product.imageUrl` y `Scenario.weeklySchedule`.

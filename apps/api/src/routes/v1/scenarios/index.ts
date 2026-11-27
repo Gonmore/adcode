@@ -24,7 +24,7 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     }
     const scenarios = await prisma.scenario.findMany({
       where: resolvedComplexId ? { complexId: resolvedComplexId } : undefined,
-      include: { pricingRules: true, group: true, complex: { select: { id: true, slug: true, name: true, timezone: true, currency: true, tenantId: true, openTime: true, closeTime: true } } },
+      include: { pricingRules: true, group: true, complex: { select: { id: true, slug: true, name: true, timezone: true, currency: true, tenantId: true, openTime: true, closeTime: true, weekendOpenTime: true, weekendCloseTime: true, weeklySchedule: true } } },
       orderBy: [{ complexId: "asc" }, { name: "asc" }],
     });
     return { data: scenarios };
@@ -135,10 +135,12 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     if (!isPlatformAdmin(req.authUser) && !isTenantAdmin(req.authUser, existing.complex.tenantId)) return reply.code(403).send({ error: "FORBIDDEN", message: "Solo el admin del tenant puede editar escenarios" });
     if (!(await assertTenantActive(existing.complex.tenantId, reply))) return;
     const { pricing, ...scenarioData } = body.data;
-    const updated = await prisma.scenario.update({
+    const data: any = { ...scenarioData };
+    if ("weeklySchedule" in body.data) data.weeklySchedule = body.data.weeklySchedule ?? null;
+    const runUpdate = (payload: any) => prisma.scenario.update({
       where: { id },
       data: {
-        ...scenarioData,
+        ...payload,
         ...(pricing?.length ? {
           pricingRules: {
             deleteMany: {},
@@ -156,7 +158,23 @@ export default async function scenariosRoutes(app: FastifyInstance) {
       },
       include: { pricingRules: true },
     });
-    return { data: updated };
+    try {
+      const updated = await runUpdate(data);
+      return { data: updated };
+    } catch (e: any) {
+      if ("weeklySchedule" in data) {
+        const { weeklySchedule, ...fallback } = data;
+        try {
+          const updated = await runUpdate(fallback);
+          return { data: updated, warning: "weeklySchedule_not_persisted" };
+        } catch (e2: any) {
+          req.log.error(e2, "SCENARIO_PATCH_FAILED_FALLBACK");
+          return reply.code(500).send({ error: "INTERNAL_ERROR", message: e2?.message || "No se pudo actualizar el escenario" });
+        }
+      }
+      req.log.error(e, "SCENARIO_PATCH_FAILED");
+      return reply.code(500).send({ error: "INTERNAL_ERROR", message: e?.message || "No se pudo actualizar el escenario" });
+    }
   });
 
   app.delete("/:id", async (req, reply) => {
@@ -189,10 +207,13 @@ export default async function scenariosRoutes(app: FastifyInstance) {
     function parseHM(v: string | null | undefined, fb: string){ const s=(v||fb||"00:00").slice(0,5); const m=/^(\d{1,2}):(\d{2})$/.exec(s); if(!m) return fb; return `${String(Math.min(23,Number(m[1]))).padStart(2,'0')}:${String(Math.min(59,Number(m[2]))).padStart(2,'0')}`; }
     function toMin(hm: string){ const [h,m]=hm.split(':').map(Number); return h*60+m; }
     function inSchedule(complex: any, scenario: any){
+      const ws = (scenario.weeklySchedule && typeof scenario.weeklySchedule === "object") ? scenario.weeklySchedule : (complex.weeklySchedule && typeof complex.weeklySchedule === "object" ? complex.weeklySchedule : null);
+      const ds = ws ? (ws[String(weekday)] ?? ws[weekday] ?? null) : null;
       const days: number[] = Array.isArray(scenario.availableDays) && scenario.availableDays.length ? scenario.availableDays : [0,1,2,3,4,5,6];
-      if (!days.includes(weekday)) return false;
-      const open = parseHM(scenario.openTime || complex.openTime, "08:00");
-      const close = parseHM(scenario.closeTime || complex.closeTime, "22:00");
+      if (ds?.closed) return false;
+      if (!ws && !days.includes(weekday)) return false;
+      const open = parseHM(scenario.openTime || ds?.open || ((weekday===0||weekday===6) ? (complex.weekendOpenTime || complex.openTime) : complex.openTime), "08:00");
+      const close = parseHM(scenario.closeTime || ds?.close || ((weekday===0||weekday===6) ? (complex.weekendCloseTime || complex.closeTime) : complex.closeTime), "22:00");
       if (open >= close) return false;
       const sMin = startAt.getHours()*60 + startAt.getMinutes();
       const eMin = endAt.getHours()*60 + endAt.getMinutes();

@@ -46,7 +46,7 @@ export default async function salesRoutes(app: FastifyInstance) {
         return { id: pr.id, name: pr.name, unitsPerPack: pr.unitsPerPack, price: Number(pr.price) || Number(p.price), cost: Number(pr.cost), stock, available: stock > 0 };
       });
       const stock = pres.reduce((s: number, pr: any) => s + pr.stock, 0);
-      return { id: p.id, name: p.name, notes: p.notes, imageKey: p.imageKey, category: p.category?.name || null, stock, presentations: pres };
+      return { id: p.id, name: p.name, notes: p.notes, imageKey: p.imageKey, imageUrl: p.imageUrl, category: p.category?.name || null, stock, presentations: pres };
     }).filter((p: any) => p.presentations.length > 0);
     const categories = Array.from(new Set(items.map(i => i.category).filter(Boolean)));
     return { data: { complex, categories, items } };
@@ -62,7 +62,7 @@ export default async function salesRoutes(app: FastifyInstance) {
     });
     const data = products.map((p: any) => {
       const pres = p.presentations.map((pr: any) => ({ id: pr.id, name: pr.name, price: Number(pr.price), cost: Number(pr.cost), stock: p.stockLots.filter((l: any) => l.presentationId === pr.id).reduce((s: number, l: any) => s + l.qty, 0) }));
-      return { id: p.id, name: p.name, category: p.category, imageKey: p.imageKey, presentations: pres, stock: pres.reduce((s: number, x: any) => s + x.stock, 0) };
+      return { id: p.id, name: p.name, category: p.category, imageKey: p.imageKey, imageUrl: p.imageUrl, presentations: pres, stock: pres.reduce((s: number, x: any) => s + x.stock, 0) };
     });
     return { data };
   });

@@ -135,3 +135,25 @@ Registro de cambios, decisiones y pendientes del proyecto.
 - `apps/api/src/routes/v1/scenarios/index.ts` (tzOffset, weeklySchedule)
 - `apps/web/src/app/App.tsx` (platform admin, modales, labels, precios, mantenimiento)
 - `apps/web/src/app/NumberInput.tsx` (center prop)
+
+## 2026-11-27 - Reportes detallados, imágenes producto, cobro y menú QR
+
+### Cambios principales
+- **Reportes**: `GET /reports/details` con ingresos/egresos/proveedores detallados (cliente, fecha/hora reserva, proveedor, nota, método). UI con KPIs, gráfica barras por periodo, origen y tablas detalladas; fecha ingreso con hora abajo.
+- **Producto imageUrl**: campo Prisma/API `Product.imageUrl`; menú público, ventas, productos e inventario muestran imagen; edición de producto carga `imageUrl`.
+- **Inventario**: ingreso multi-producto por borrador (+/- por lote), footer sticky “Confirmar ingresos”, egreso estimado por costo, nota opcional, registro por `/inventory/stock/in` con `registerExpense`.
+- **Ventas/cobro**: “Confirmar venta” abre modal efectivo/QR/mixto; efectivo con cortes rápidos BOB 10/20/50/100/200 y Exacto, cambio automático; confirma reserva pendiente si aplica.
+- **Menú digital + QR**: acceso por rol — admin/vendedor complejo directo, tenant admin elige complejo, platform admin elige tenant+complejo; modal con link `/menu/:slug` y QR.
+- **Migración Prisma**: `20261127170000_product_imageurl_scenario_weeklyschedule` agrega `Product.imageUrl` y `Scenario.weeklySchedule` (idempotente).
+
+### Archivos modificados
+- `apps/api/prisma/schema.prisma`
+- `apps/api/prisma/migrations/20261127170000_product_imageurl_scenario_weeklyschedule/migration.sql`
+- `apps/api/src/routes/v1/inventory/index.ts`
+- `apps/api/src/routes/v1/sales/index.ts`
+- `apps/api/src/routes/v1/reports/index.ts`
+- `apps/web/src/app/App.tsx`
+- `API_REFERENCE.md`, `ARCHITECTURE.md`, `bitacora.md`
+
+### Deploy
+- `deploy.sh` ya ejecuta `prisma migrate deploy` antes de reiniciar contenedores; la nueva migración es idempotente (`IF NOT EXISTS`). Verificar `.env` remoto y ejecutar deploy desde entorno con Docker/buildx y acceso SSH.
